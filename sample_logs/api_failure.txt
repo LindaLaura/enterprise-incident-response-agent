@@ -1,0 +1,13 @@
+[2026-06-12 09:15:22] ERROR [PaymentAPI] HTTP 503 Service Unavailable from payment-gateway.example.com
+[2026-06-12 09:15:22] WARN [PaymentAPI] Circuit breaker triggered after 5 consecutive failures
+[2026-06-12 09:15:23] ERROR [CheckoutService] Payment processing failed for order #12345
+[2026-06-12 09:15:25] ERROR [PaymentAPI] HTTP 503 Service Unavailable from payment-gateway.example.com
+[2026-06-12 09:15:30] INFO [CircuitBreaker] Circuit opened - fast-failing requests for 60 seconds
+[2026-06-12 09:15:35] ERROR [CheckoutService] Payment processing failed for order #12346
+[2026-06-12 09:15:40] ERROR [CheckoutService] Payment processing failed for order #12347
+[2026-06-12 09:15:45] WARN [CheckoutService] 127 failed payment attempts in last 60 seconds
+[2026-06-12 09:16:00] INFO [AlertManager] Incident detected: Payment gateway outage
+[2026-06-12 09:16:30] INFO [CircuitBreaker] Circuit half-open - testing connection
+[2026-06-12 09:16:31] ERROR [PaymentAPI] HTTP 503 Service Unavailable from payment-gateway.example.com
+[2026-06-12 09:16:31] WARN [CircuitBreaker] Test failed - circuit reopened
+[2026-06-12 09:17:00] CRITICAL [AlertManager] Incident severity: CRITICAL - Payment processing unavailable

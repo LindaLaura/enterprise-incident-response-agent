@@ -1,0 +1,12 @@
+[2026-06-12 14:23:45] ERROR [DatabaseService] Connection pool exhausted
+[2026-06-12 14:23:45] ERROR [DatabaseService] Failed to acquire connection after 30s timeout
+[2026-06-12 14:23:46] ERROR [OrderService] Database query failed: Could not connect to PostgreSQL server
+[2026-06-12 14:23:46] WARN [OrderService] Retry attempt 1/3 failed
+[2026-06-12 14:23:47] ERROR [OrderService] Retry attempt 2/3 failed
+[2026-06-12 14:23:48] ERROR [OrderService] Retry attempt 3/3 failed
+[2026-06-12 14:23:48] CRITICAL [OrderService] Order processing pipeline halted
+[2026-06-12 14:23:50] ERROR [HealthCheck] Database health check failed - marking service as unhealthy
+[2026-06-12 14:23:55] INFO [LoadBalancer] Removing instance i-abc123 from rotation
+[2026-06-12 14:24:00] ERROR [DatabaseService] Max connections (100) reached
+[2026-06-12 14:24:05] ERROR [DatabaseService] Connection leak detected: 85 connections open for >5 minutes
+[2026-06-12 14:24:10] CRITICAL [AlertManager] Incident severity: HIGH - Database connection exhaustion
