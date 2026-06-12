@@ -61,4 +61,5 @@ Combine all analysis into a structured incident report.
 - RAG for historical incident lookup
 - Agent-based autonomous investigation
 - Multi-agent collaboration
+- MCP - Model Context Protocol
 - Production deployment
