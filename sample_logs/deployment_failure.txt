@@ -1,0 +1,30 @@
+[2026-06-12 16:45:10] INFO [DeploymentPipeline] Starting deployment for release v2.3.1 to production
+[2026-06-12 16:45:15] INFO [DeploymentPipeline] Running pre-deployment health checks
+[2026-06-12 16:45:20] INFO [HealthCheck] All systems healthy - proceeding with deployment
+[2026-06-12 16:45:25] INFO [DeploymentPipeline] Pulling container image: app-server:v2.3.1
+[2026-06-12 16:45:40] INFO [ContainerRegistry] Image pulled successfully
+[2026-06-12 16:45:45] INFO [DeploymentPipeline] Initiating rolling update across 12 pods
+[2026-06-12 16:46:00] INFO [Kubernetes] Terminating pod app-server-abc123 (old version)
+[2026-06-12 16:46:05] INFO [Kubernetes] Starting pod app-server-xyz789 (v2.3.1)
+[2026-06-12 16:46:15] ERROR [app-server-xyz789] Failed to initialize database connection pool
+[2026-06-12 16:46:15] ERROR [app-server-xyz789] Connection refused: postgresql://prod-db:5432
+[2026-06-12 16:46:20] WARN [Kubernetes] Readiness probe failed for pod app-server-xyz789 (attempt 1/3)
+[2026-06-12 16:46:30] ERROR [app-server-xyz789] Missing required environment variable: DB_CONNECTION_STRING
+[2026-06-12 16:46:35] WARN [Kubernetes] Readiness probe failed for pod app-server-xyz789 (attempt 2/3)
+[2026-06-12 16:46:45] ERROR [app-server-xyz789] Application startup failed - exiting
+[2026-06-12 16:46:50] WARN [Kubernetes] Readiness probe failed for pod app-server-xyz789 (attempt 3/3)
+[2026-06-12 16:46:55] ERROR [Kubernetes] Pod app-server-xyz789 failed readiness checks - marking unhealthy
+[2026-06-12 16:47:00] WARN [DeploymentPipeline] Rolling update stalled: new pods failing to start
+[2026-06-12 16:47:05] ERROR [Kubernetes] CrashLoopBackOff detected on pod app-server-xyz789
+[2026-06-12 16:47:10] INFO [Kubernetes] Starting pod app-server-def456 (v2.3.1)
+[2026-06-12 16:47:20] ERROR [app-server-def456] Failed to initialize database connection pool
+[2026-06-12 16:47:20] ERROR [app-server-def456] Missing required environment variable: DB_CONNECTION_STRING
+[2026-06-12 16:47:25] CRITICAL [DeploymentPipeline] Multiple pods failing with same error - deployment compromised
+[2026-06-12 16:47:30] ERROR [LoadBalancer] Insufficient healthy pods: 10/12 required, only 10 available
+[2026-06-12 16:47:35] WARN [AlertManager] Service degradation detected - response time increased by 45%
+[2026-06-12 16:47:40] ERROR [DeploymentPipeline] Rolling update failed - unable to achieve desired state
+[2026-06-12 16:47:45] CRITICAL [AlertManager] Incident detected: Deployment failure v2.3.1
+[2026-06-12 16:47:50] INFO [DeploymentPipeline] Initiating automatic rollback to v2.3.0
+[2026-06-12 16:48:00] INFO [Kubernetes] Rolling back to previous deployment revision
+[2026-06-12 16:48:30] INFO [HealthCheck] All pods healthy after rollback - service restored
+[2026-06-12 16:48:35] WARN [DeploymentPipeline] Deployment v2.3.1 failed - investigation required
