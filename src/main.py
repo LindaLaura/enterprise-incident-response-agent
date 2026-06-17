@@ -4,17 +4,32 @@ Enterprise Incident Response Agent - CLI Entry Point
 Week 1 MVP: Analyze incident logs and generate structured reports.
 """
 
+
 import os
 import sys
 import json
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load environment variables BEFORE importing  modules
+BASE_DIR = Path(__file__).resolve().parent.parent
+ENV_FILE = BASE_DIR / ".env"
 
-print("CLI started")
+# Load .env file if it exists
+if ENV_FILE.exists():
+    load_dotenv(ENV_FILE, override=True)
+else:
+    # Fallback to searching default locations
+    load_dotenv(override=True) 
+
+from openai_client import OpenAIClient
+from anthropic_client import AnthropicClient
+from incident_chain import IncidentAnalysisChain
+from prompts import EXTRACT_INFORMATION_PROMPT
 
 def main():
     """Main CLI entry point."""
+
     # Step 1: Parse command-line arguments
     if len(sys.argv) < 2:
         print("Usage: python src/main.py <log_file_path>")
@@ -42,28 +57,36 @@ def main():
         print(f"Error reading file: {e}")
         sys.exit(1)
 
-    # Step 4: Run incident analysis chain (placeholder)
+    # Step 4: Initialize LLM and run incident analysis
     print("=== Incident Analysis ===")
-    print("Note: LLM integration not yet implemented")
-    print("Log content preview:")
-    print("-" * 50)
-    print(log_content[:500] + "..." if len(log_content) > 500 else log_content)
-    print("-" * 50)
+    print("Initializing LLM client...")
+    provider = os.getenv("DEFAULT_PROVIDER", "openai")  # Get from .env or default to "openai"
+  
+    if provider == "openai":
+      llm_client = OpenAIClient()
+      print("=== Using OpenAI ===")
+    elif provider == "anthropic":
+      llm_client = AnthropicClient()
+      print("=== Using Anthropic ===")
+    else:
+      print(f"Error: Unknown provider '{provider}'")
+      sys.exit(1)
 
-    # TODO: Initialize LLM client based on DEFAULT_PROVIDER
-    # TODO: Create IncidentAnalysisChain
-    # TODO: Run analysis: result = chain.analyze(log_content)
+    print("Creating analysis chain...")
+    chain = IncidentAnalysisChain (llm_client)
 
-    # Step 5: Output placeholder result
-    placeholder_result = {
-        "status": "placeholder",
-        "message": "Analysis chain not yet implemented",
-        "log_file": log_file_path,
-        "log_length": len(log_content)
-    }
+    print("Running analysis (this may take 30-60 seconds)...\n")
 
-    print("\n=== Analysis Result (Placeholder) ===")
-    print(json.dumps(placeholder_result, indent=2))
+    try:
+      result = chain.analyze(log_content)
+      print("Analysis complete!")
+    except Exception as e:
+      print(f"Error during analysis: {e}")
+      sys.exit(1)
+
+    # Step 5: Output the real result
+    print("\n=== Analysis Result ===")
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

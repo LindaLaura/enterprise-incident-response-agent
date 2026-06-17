@@ -57,19 +57,34 @@ Extracted Information:
 {extracted_info}
 
 Root Cause Analysis:
-{root_cause}
+{root_cause_analysis}
 
 Recommendations:
 {recommendations}
 
-Output a JSON report with the following structure:
+Return ONLY valid JSON.
+
+Do not include markdown.
+Do not add fields that are not listed below.
+Do not invent financial, ROI, postmortem, or stakeholder data unless explicitly present in the logs.
+
+Use this exact JSON structure:
+
 {{
   "incident_id": "auto-generated",
   "timestamp": "ISO 8601 format",
   "severity": "LOW|MEDIUM|HIGH|CRITICAL",
   "affected_services": [],
-  "root_cause": {{}},
+  "root_cause": {{
+    "primary_cause": "",
+    "confidence_level": "",
+    "supporting_evidence": []
+  }},
   "timeline": [],
-  "recommendations": {{}}
+  "recommendations": {{
+    "immediate_actions": [],
+    "short_term_fixes": [],
+    "long_term_improvements": []
+  }}
 }}
 """
