@@ -1,0 +1,128 @@
+Kubernetes Deployment Troubleshooting Guide
+
+Pod Lifecycle Issues
+
+CrashLoopBackOff:
+- Application exits immediately after start
+- Common causes:
+  * Missing environment variables
+  * Failed health checks
+  * Application configuration errors
+  * Missing dependencies
+
+Diagnostic Commands:
+kubectl describe pod <pod-name>
+kubectl logs <pod-name> --previous
+kubectl get events --sort-by='.lastTimestamp'
+
+ImagePullBackOff:
+- Cannot pull container image
+- Common causes:
+  * Invalid image name or tag
+  * Missing image registry credentials
+  * Network connectivity to registry
+  * Image doesn't exist
+
+Resolution:
+kubectl describe pod <pod-name>  # Check Events section
+kubectl get secret <imagePullSecret>
+kubectl create secret docker-registry <secret-name> --docker-server=<registry> --docker-username=<user> --docker-password=<pass>
+
+Pending Pods:
+- Pod cannot be scheduled
+- Common causes:
+  * Insufficient cluster resources
+  * Node selector/affinity constraints
+  * PersistentVolume issues
+  * Resource quotas exceeded
+
+Check Resources:
+kubectl describe pod <pod-name>
+kubectl top nodes
+kubectl describe nodes
+
+Health Check Failures:
+
+Readiness Probe Failing:
+- Pod not receiving traffic
+- Check application startup time
+- Verify probe endpoint responds correctly
+- Increase initialDelaySeconds if needed
+
+Liveness Probe Failing:
+- Pod being restarted repeatedly
+- Application may be deadlocked
+- Check probe timeout and period
+- Review application logs for errors
+
+Configuration:
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: 8080
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: 8080
+  initialDelaySeconds: 60
+  periodSeconds: 30
+
+Environment Variable Issues:
+
+Missing ConfigMaps/Secrets:
+kubectl get configmap <name>
+kubectl get secret <name>
+kubectl describe pod <pod-name>  # Check Mounts section
+
+Debug Running Pod:
+kubectl exec -it <pod-name> -- env
+kubectl exec -it <pod-name> -- sh
+
+Deployment Strategies:
+
+Rolling Update:
+- Default strategy
+- Zero-downtime deployments
+- Configure maxSurge and maxUnavailable
+
+Blue-Green:
+- Two identical environments
+- Instant rollback capability
+- Higher resource usage
+
+Canary:
+- Gradual traffic shift
+- Monitor metrics before full rollout
+- Use service mesh for traffic splitting
+
+Rollback Procedures:
+kubectl rollout undo deployment/<name>
+kubectl rollout history deployment/<name>
+kubectl rollout status deployment/<name>
+
+Resource Management:
+
+Set Resource Requests and Limits:
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "256Mi"
+    cpu: "500m"
+
+Monitor Usage:
+kubectl top pod <pod-name>
+kubectl top node <node-name>
+
+Prevention Best Practices:
+- Use init containers for dependencies
+- Implement proper health checks
+- Set appropriate resource limits
+- Use pod disruption budgets
+- Test deployments in staging
+- Enable admission controllers
+- Use GitOps for declarative deployments

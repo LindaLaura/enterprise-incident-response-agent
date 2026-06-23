@@ -1,0 +1,72 @@
+Database Connection Pool Management Runbook
+
+Overview:
+This runbook covers diagnosis and remediation of database connection pool issues.
+
+Common Symptoms:
+- Connection timeout errors
+- "Max connections reached" errors
+- Slow query response times
+- Application hanging on database operations
+
+Diagnosis Steps:
+
+1. Check Connection Pool Metrics
+   - Current active connections
+   - Idle connections
+   - Connection wait time
+   - Pool utilization percentage
+
+2. Identify Connection Leaks
+   SELECT pid, usename, application_name, state, state_change
+   FROM pg_stat_activity
+   WHERE state_change < NOW() - INTERVAL '5 minutes'
+   AND state = 'idle';
+
+3. Check for Long-Running Transactions
+   SELECT pid, now() - pg_stat_activity.query_start AS duration, query
+   FROM pg_stat_activity
+   WHERE state != 'idle'
+   ORDER BY duration DESC;
+
+Immediate Remediation:
+
+1. Restart Application Pool
+   - Rolling restart to avoid complete downtime
+   - Monitor connection pool metrics during restart
+
+2. Kill Idle Connections (Use with caution)
+   SELECT pg_terminate_backend(pid)
+   FROM pg_stat_activity
+   WHERE state = 'idle'
+   AND state_change < NOW() - INTERVAL '10 minutes';
+
+3. Temporary Pool Increase
+   - Increase max_connections temporarily
+   - This is a band-aid, not a solution
+
+Root Cause Solutions:
+
+1. Code Review
+   - Ensure all connections use try-with-resources or context managers
+   - Check error handling paths for missing close() calls
+   - Look for abandoned transactions
+
+2. Pool Configuration
+   maxPoolSize: 20-50 (depends on workload)
+   minIdle: 10
+   maxLifetime: 1800000 (30 minutes)
+   idleTimeout: 600000 (10 minutes)
+   connectionTimeout: 30000 (30 seconds)
+   leakDetectionThreshold: 60000 (1 minute)
+
+3. Monitoring Setup
+   - Alert on pool utilization > 80%
+   - Track connection age distribution
+   - Monitor connection acquisition time P95
+
+Prevention:
+- Regular code audits for resource leaks
+- Load testing with connection pool monitoring
+- Automated leak detection in CI/CD
+- Circuit breakers for database operations

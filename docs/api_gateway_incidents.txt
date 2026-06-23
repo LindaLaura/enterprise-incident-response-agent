@@ -1,0 +1,188 @@
+API Gateway and External Service Incident Response
+
+Circuit Breaker Pattern
+
+Purpose:
+Prevent cascading failures when external services are unavailable
+
+States:
+1. Closed: Normal operation, requests pass through
+2. Open: Requests fail immediately without calling service
+3. Half-Open: Test requests to check if service recovered
+
+Configuration Example:
+circuit_breaker:
+  failure_threshold: 5
+  timeout: 60s
+  half_open_requests: 3
+
+HTTP Error Codes:
+
+503 Service Unavailable:
+- Upstream service down or overloaded
+- Check service health endpoints
+- Verify network connectivity
+- Review service logs
+
+502 Bad Gateway:
+- Gateway cannot reach upstream
+- DNS resolution issues
+- Firewall/network problems
+- Upstream service crashed
+
+504 Gateway Timeout:
+- Upstream taking too long
+- Check upstream performance
+- Review timeout configurations
+- Consider async processing
+
+429 Too Many Requests:
+- Rate limit exceeded
+- Implement backoff strategy
+- Check rate limit quotas
+- Consider request batching
+
+Retry Strategy:
+
+Exponential Backoff:
+def retry_with_backoff(func, max_attempts=5, base_delay=1):
+    for attempt in range(max_attempts):
+        try:
+            return func()
+        except Exception as e:
+            if attempt == max_attempts - 1:
+                raise
+            delay = base_delay * (2 ** attempt)
+            time.sleep(delay)
+
+Best Practices:
+- Limit max retry attempts
+- Use jitter to avoid thundering herd
+- Don't retry on client errors (4xx)
+- Log all retry attempts
+
+Timeout Configuration:
+
+Connection Timeout: Time to establish connection
+Read Timeout: Time to receive response
+Total Timeout: Overall operation timeout
+
+Recommended Values:
+- Connection: 5-10 seconds
+- Read: 30-60 seconds
+- Total: No more than 2x read timeout
+
+Fallback Mechanisms:
+
+1. Cached Responses
+   - Store recent successful responses
+   - Serve stale data when service unavailable
+   - Include cache timestamp in response
+
+2. Default Values
+   - Provide sensible defaults
+   - Better than complete failure
+   - Log when using defaults
+
+3. Degraded Mode
+   - Disable non-critical features
+   - Maintain core functionality
+   - Show user-friendly messages
+
+Monitoring and Alerting:
+
+Key Metrics:
+- Request success rate
+- Response time percentiles (P50, P95, P99)
+- Error rate by status code
+- Circuit breaker state changes
+- Timeout frequency
+
+Alert Thresholds:
+- Error rate > 5% for 5 minutes
+- P95 latency > 2x baseline
+- Circuit breaker open
+- Timeout rate > 1%
+
+Service Level Objectives (SLOs):
+- 99.9% availability
+- P95 latency < 500ms
+- Error rate < 0.1%
+
+Incident Response Checklist:
+
+1. Identify Impact
+   - How many requests failing?
+   - Which endpoints affected?
+   - Customer-facing impact?
+
+2. Check Service Health
+   - Service status page
+   - Health check endpoints
+   - Recent deployments
+
+3. Activate Mitigation
+   - Enable circuit breakers
+   - Increase timeouts temporarily
+   - Route to backup service
+   - Enable fallback responses
+
+4. Communication
+   - Update status page
+   - Notify stakeholders
+   - Post in incident channel
+
+5. Investigation
+   - Review logs and metrics
+   - Check upstream dependencies
+   - Analyze traffic patterns
+   - Review recent changes
+
+6. Resolution
+   - Fix root cause
+   - Verify fix in staging
+   - Deploy to production
+   - Monitor closely
+
+7. Post-Incident
+   - Document timeline
+   - Write postmortem
+   - Identify improvements
+   - Update runbooks
+
+Load Balancing:
+
+Strategies:
+- Round Robin: Simple, equal distribution
+- Least Connections: Route to least busy
+- IP Hash: Consistent routing per client
+- Weighted: Based on capacity
+
+Health Checks:
+- Active: Periodically ping endpoints
+- Passive: Monitor actual traffic
+- Configure appropriate intervals
+- Remove unhealthy instances quickly
+
+Rate Limiting:
+
+Token Bucket Algorithm:
+- Refill tokens at fixed rate
+- Consume tokens per request
+- Reject when bucket empty
+- Smooth traffic flow
+
+Implementation:
+rate_limit:
+  requests_per_minute: 1000
+  burst_size: 100
+  key: client_id
+
+Prevention Strategies:
+- Implement circuit breakers everywhere
+- Use bulkhead pattern for isolation
+- Cache aggressively
+- Set appropriate timeouts
+- Monitor third-party SLAs
+- Have backup providers
+- Test failure scenarios regularly

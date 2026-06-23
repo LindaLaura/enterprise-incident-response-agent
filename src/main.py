@@ -73,7 +73,11 @@ def main():
       sys.exit(1)
 
     print("Creating analysis chain...")
-    chain = IncidentAnalysisChain (llm_client)
+
+    # Check if RAG and Memory should be enabled (can be controlled via env vars)
+    use_rag = os.getenv("USE_RAG", "true").lower() == "true"
+    use_memory = os.getenv("USE_MEMORY", "true").lower() == "true"
+    chain = IncidentAnalysisChain(llm_client, use_rag=use_rag, use_memory=use_memory)
 
     print("Running analysis (this may take 30-60 seconds)...\n")
 
