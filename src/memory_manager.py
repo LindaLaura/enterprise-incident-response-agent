@@ -2,12 +2,55 @@
 Memory Manager for Incident Response Agent
 
 Handles both short-term (session) and long-term (persistent) memory.
+Features: File locking, backup/restore, data validation, concurrent access safety.
 """
 
 import json
+import fcntl
+import time
+import shutil
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
+from pydantic import BaseModel, Field, field_validator, ConfigDict
+
+
+class IncidentRecord(BaseModel):
+    """Pydantic model for incident records."""
+    incident_id: str
+    timestamp: str
+    summary: str
+    root_cause: str
+    recommendations: List[str]
+    severity: str
+    affected_services: List[str]
+    incident_timestamp: Optional[str] = None
+    events_by_severity: Optional[dict] = None
+
+    @field_validator('severity')
+    @classmethod
+    def validate_severity(cls, v):
+        valid_severities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']
+        if v not in valid_severities:
+            raise ValueError(f'Severity must be one of {valid_severities}')
+        return v
+
+
+class MemoryMetadata(BaseModel):
+    """Pydantic model for memory metadata."""
+    created_at: str
+    total_incidents: int
+
+
+class LongTermMemory(BaseModel):
+    """Complete long-term memory schema."""
+    incidents: List[IncidentRecord]
+    root_causes: dict
+    recommendations: dict
+    user_preferences: dict
+    metadata: MemoryMetadata
+
+    model_config = ConfigDict(extra='forbid')
 
 
 class MemoryManager:
@@ -15,7 +58,7 @@ class MemoryManager:
 
     def __init__(self, memory_dir: str = "./memory"):
         """
-        Initialize memory manager.
+        Initialize memory manager with file locking and backup support.
 
         Args:
             memory_dir: Directory for persistent memory storage
@@ -33,18 +76,88 @@ class MemoryManager:
 
         # Long-term memory file
         self.long_term_file = self.memory_dir / "long_term_memory.json"
+        self.lock_file = self.memory_dir / ".memory.lock"
+        self.backup_dir = self.memory_dir / "backups"
+        self.backup_dir.mkdir(exist_ok=True)
+
+        # Lock configuration
+        self.max_retries = 10
+        self.lock_timeout = 30
+        self.max_backups = 7
+
         self.long_term = self._load_long_term()
 
-    def _load_long_term(self) -> Dict[str, Any]:
-        """Load long-term memory from disk."""
-        if self.long_term_file.exists():
+    def _acquire_lock(self):
+        """Acquire file lock with retry logic."""
+        for attempt in range(self.max_retries):
             try:
-                with open(self.long_term_file, 'r') as f:
-                    return json.load(f)
-            except Exception as e:
-                print(f"⚠️  Failed to load long-term memory: {e}")
+                lock_file = open(self.lock_file, 'w')
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return lock_file
+            except IOError:
+                if attempt == self.max_retries - 1:
+                    raise TimeoutError(
+                        f"Could not acquire lock after {self.max_retries} attempts"
+                    )
+                time.sleep(0.2 * (attempt + 1))
+        return None
 
-        # Initialize empty long-term memory
+    def _release_lock(self, lock_file):
+        """Release file lock."""
+        if lock_file:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                lock_file.close()
+            except Exception as e:
+                print(f"⚠️  Failed to release lock: {e}")
+
+    def _create_backup(self):
+        """Create timestamped backup of long-term memory."""
+        if not self.long_term_file.exists():
+            return
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_file = self.backup_dir / f"memory_{timestamp}.json.bak"
+
+        try:
+            shutil.copy2(self.long_term_file, backup_file)
+        except Exception as e:
+            print(f"⚠️  Backup failed: {e}")
+
+    def _cleanup_old_backups(self):
+        """Remove backups older than max_backups days."""
+        now = datetime.now()
+        cutoff_date = now - timedelta(days=self.max_backups)
+
+        for backup_file in self.backup_dir.glob("memory_*.json.bak"):
+            try:
+                timestamp_str = backup_file.name.replace("memory_", "").replace(".json.bak", "")
+                backup_date = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+
+                if backup_date < cutoff_date:
+                    backup_file.unlink()
+            except ValueError:
+                pass
+
+    def _load_from_backup(self) -> Dict[str, Any]:
+        """Load from most recent backup if main file corrupted."""
+        backup_files = sorted(self.backup_dir.glob("memory_*.json.bak"), reverse=True)
+
+        for backup_file in backup_files:
+            try:
+                with open(backup_file, 'r') as f:
+                    data = json.load(f)
+                print(f"⚠️  Loaded from backup: {backup_file.name}")
+                return data
+            except json.JSONDecodeError:
+                print(f"⚠️  Backup corrupted: {backup_file.name}")
+                continue
+
+        print("❌ No valid backup found")
+        return self._get_default_long_term()
+
+    def _get_default_long_term(self) -> Dict[str, Any]:
+        """Get default empty long-term memory."""
         return {
             'incidents': [],
             'root_causes': {},
@@ -56,13 +169,95 @@ class MemoryManager:
             }
         }
 
-    def _save_long_term(self):
-        """Save long-term memory to disk."""
+    def _load_long_term(self) -> Dict[str, Any]:
+        """Load long-term memory from disk with file locking and validation."""
+        lock_file = self._acquire_lock()
         try:
-            with open(self.long_term_file, 'w') as f:
+            if self.long_term_file.exists():
+                try:
+                    with open(self.long_term_file, 'r') as f:
+                        raw_data = json.load(f)
+
+                    # Basic structure validation
+                    if not isinstance(raw_data, dict) or 'metadata' not in raw_data:
+                        print("❌ Invalid data structure")
+                        return self._load_from_backup()
+
+                    return raw_data
+
+                except json.JSONDecodeError as e:
+                    print(f"❌ JSON parse error: {e}")
+                    return self._load_from_backup()
+        finally:
+            self._release_lock(lock_file)
+
+        return self._get_default_long_term()
+
+    def _save_long_term(self):
+        """Save long-term memory to disk with file locking and atomic writes."""
+        lock_file = self._acquire_lock()
+        try:
+            self._create_backup()
+
+            temp_file = self.long_term_file.with_suffix('.tmp')
+            with open(temp_file, 'w') as f:
                 json.dump(self.long_term, f, indent=2)
+
+            temp_file.replace(self.long_term_file)
+            self._cleanup_old_backups()
+
         except Exception as e:
-            print(f"⚠️  Failed to save long-term memory: {e}")
+            print(f"❌ Failed to save long-term memory: {e}")
+            raise
+        finally:
+            self._release_lock(lock_file)
+
+    def get_backup_history(self) -> List[Dict[str, Any]]:
+        """Get list of available backups."""
+        backups = []
+        for backup_file in sorted(self.backup_dir.glob("memory_*.json.bak"), reverse=True):
+            try:
+                stat = backup_file.stat()
+                timestamp_str = backup_file.name.replace("memory_", "").replace(".json.bak", "")
+                backup_date = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+
+                backups.append({
+                    'filename': backup_file.name,
+                    'timestamp': backup_date.isoformat(),
+                    'size_kb': stat.st_size // 1024,
+                    'path': str(backup_file)
+                })
+            except (ValueError, OSError):
+                pass
+
+        return backups
+
+    def restore_from_backup(self, backup_file_path: str) -> bool:
+        """Restore memory from a specific backup."""
+        backup_path = Path(backup_file_path)
+
+        if not backup_path.exists():
+            print(f"❌ Backup not found: {backup_file_path}")
+            return False
+
+        try:
+            with open(backup_path, 'r') as f:
+                data = json.load(f)
+
+            # Validate structure
+            if not all(key in data for key in ['incidents', 'metadata']):
+                print("❌ Invalid backup structure")
+                return False
+
+            self._create_backup()
+            self.long_term = data
+            self._save_long_term()
+            print(f"✅ Restored from backup: {backup_file_path}")
+            return True
+
+        except Exception as e:
+            print(f"❌ Restore failed: {e}")
+            return False
 
     # Short-term memory methods
 
@@ -139,7 +334,9 @@ class MemoryManager:
         root_cause: str,
         recommendations: List[str],
         severity: str,
-        affected_services: List[str]
+        affected_services: List[str],
+        incident_timestamp: Optional[str] = None,
+        events_by_severity: Optional[Dict[str, List[Dict[str, str]]]] = None
     ):
         """
         Save incident to long-term memory.
@@ -151,7 +348,12 @@ class MemoryManager:
             recommendations: List of recommendations
             severity: Incident severity
             affected_services: List of affected services
+            incident_timestamp: When the incident occurred (from logs)
+            events_by_severity: Categorized events with timestamp and service (CRITICAL, ERROR, WARN, INFO)
         """
+        # Reload to get latest state (important for concurrent access)
+        self.long_term = self._load_long_term()
+
         incident_record = {
             'incident_id': incident_id,
             'timestamp': datetime.now().isoformat(),
@@ -161,6 +363,14 @@ class MemoryManager:
             'severity': severity,
             'affected_services': affected_services
         }
+
+        # Add incident timestamp if provided
+        if incident_timestamp:
+            incident_record['incident_timestamp'] = incident_timestamp
+
+        # Add categorized events if provided
+        if events_by_severity:
+            incident_record['events_by_severity'] = events_by_severity
 
         self.long_term['incidents'].append(incident_record)
         self.long_term['metadata']['total_incidents'] += 1

@@ -92,7 +92,21 @@ Use this exact JSON structure:
 
 {{
   "incident_id": "auto-generated based on timestamp",
-  "timestamp": "ISO 8601 format from logs",
+  "incident_timestamp": "ISO 8601 format - the FIRST timestamp from the logs (when THIS incident started)",
+  "events_by_severity": {{
+    "CRITICAL": [
+      {{"timestamp": "ISO 8601", "service": "service name from log entry"}}
+    ],
+    "ERROR": [
+      {{"timestamp": "ISO 8601", "service": "service name from log entry"}}
+    ],
+    "WARN": [
+      {{"timestamp": "ISO 8601", "service": "service name from log entry"}}
+    ],
+    "INFO": [
+      {{"timestamp": "ISO 8601", "service": "service name from log entry"}}
+    ]
+  }},
   "severity": "LOW|MEDIUM|HIGH|CRITICAL",
   "status": "ACTIVE|INVESTIGATING|RESOLVED",
   "affected_services": ["list of services from logs"],
@@ -136,7 +150,7 @@ Use this exact JSON structure:
     "rag_enabled": true,
     "memory_enabled": true,
     "total_incidents_in_memory": 0,
-    "generated_at": "ISO 8601 timestamp"
+    "generated_at": "will be automatically populated with current timestamp"
   }}
 }}
 """

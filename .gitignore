@@ -46,3 +46,14 @@ htmlcov/
 
 # Logs
 *.log
+
+# Frontend
+frontend/node_modules/
+frontend/build/
+frontend/.env.local
+frontend/.env.*.local
+
+# IDE
+.DS_Store
+.vscode/
+.idea/

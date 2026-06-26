@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DEFAULT_PROVIDER=${DEFAULT_PROVIDER:-anthropic}
+      - USE_RAG=${USE_RAG:-true}
+      - USE_MEMORY=${USE_MEMORY:-true}
+    volumes:
+      - ./memory:/app/memory
+      - ./chroma_db:/app/chroma_db
+      - ./docs:/app/docs
+    networks:
+      - incident-response
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    networks:
+      - incident-response
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  incident-response:
+    driver: bridge
+
+volumes:
+  memory:
+  chroma_db:
+  docs:

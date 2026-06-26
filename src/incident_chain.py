@@ -286,7 +286,9 @@ class IncidentAnalysisChain:
                 root_cause=str(report.get('root_cause', {}).get('primary_cause', '')),
                 recommendations=[str(r) for r in report.get('recommendations', {}).get('immediate_actions', [])[:3]],
                 severity=report.get('severity', 'UNKNOWN'),
-                affected_services=report.get('affected_services', [])
+                affected_services=report.get('affected_services', []),
+                incident_timestamp=report.get('incident_timestamp'),
+                events_by_severity=report.get('events_by_severity')
             )
         except Exception as e:
             print(f"  ⚠️  Failed to save to memory: {e}")
