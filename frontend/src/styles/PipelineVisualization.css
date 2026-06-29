@@ -98,7 +98,17 @@
 }
 
 .step-icon {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pending-circle {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(148, 113, 255, 0.4);
+  border-radius: 50%;
+  background: rgba(148, 113, 255, 0.1);
 }
 
 .step-content {

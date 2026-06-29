@@ -1,4 +1,5 @@
 import React from 'react';
+import { Zap, Circle } from 'lucide-react';
 import '../styles/Header.css';
 
 const Header = ({ connected }) => {
@@ -6,7 +7,9 @@ const Header = ({ connected }) => {
     <header className="header">
       <div className="header-content">
         <div className="header-logo">
-          <div className="logo-icon">⚡</div>
+          <div className="logo-icon">
+            <Zap size={32} strokeWidth={2.5} />
+          </div>
           <div className="logo-text">
             <h1>Enterprise Incident Response</h1>
             <p>AI-Powered Investigation Platform</p>
@@ -15,7 +18,7 @@ const Header = ({ connected }) => {
 
         <div className="header-status">
           <div className={`status-indicator ${connected ? 'online' : 'offline'}`}>
-            <span className="status-dot"></span>
+            <Circle size={8} fill="currentColor" />
             <span className="status-text">
               {connected ? 'Connected' : 'Connecting...'}
             </span>

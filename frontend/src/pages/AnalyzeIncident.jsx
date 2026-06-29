@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { Zap, Clipboard, RefreshCw, Upload } from 'lucide-react';
 import PipelineVisualization from '../components/PipelineVisualization';
 import DocumentUploadZone from '../components/DocumentUploadZone';
 import EvidencePanel from '../components/EvidencePanel';
@@ -131,28 +132,28 @@ const AnalyzeIncident = ({ wsRef }) => {
                 disabled={!logs.trim()}
                 className="btn-primary"
               >
-                <span className="btn-icon">⚡</span>
+                <Zap size={18} />
                 Analyze Incident
               </button>
               <button
                 onClick={handleLoadDemo}
                 className="btn-secondary"
               >
-                <span className="btn-icon">📊</span>
+                <RefreshCw size={18} />
                 Load Demo Logs
               </button>
               <button
                 onClick={handlePasteLogs}
                 className="btn-secondary"
               >
-                <span className="btn-icon">📋</span>
+                <Clipboard size={18} />
                 Paste Logs
               </button>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="btn-secondary"
               >
-                <span className="btn-icon">📁</span>
+                <Upload size={18} />
                 Upload File
               </button>
               <input

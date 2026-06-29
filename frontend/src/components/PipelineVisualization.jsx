@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Check, X, RotateCw } from 'lucide-react';
 import '../styles/PipelineVisualization.css';
 
 const PipelineVisualization = ({ steps, isAnalyzing }) => {
@@ -11,15 +12,15 @@ const PipelineVisualization = ({ steps, isAnalyzing }) => {
   const getStatusIcon = (status) => {
     switch (status) {
       case 'completed':
-        return '✓';
+        return <Check size={24} strokeWidth={3} />;
       case 'running':
-        return '⟳';
+        return <RotateCw size={24} strokeWidth={2} />;
       case 'error':
-        return '✕';
+        return <X size={24} strokeWidth={3} />;
       case 'pending':
-        return '◯';
+        return <div className="pending-circle"></div>;
       default:
-        return '◯';
+        return <div className="pending-circle"></div>;
     }
   };
 

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Upload } from 'lucide-react';
 import '../styles/DocumentUploadZone.css';
 
 const DocumentUploadZone = ({ onFileSelect }) => {
@@ -34,7 +35,9 @@ const DocumentUploadZone = ({ onFileSelect }) => {
       onDrop={handleDrop}
     >
       <div className="upload-content">
-        <div className="upload-icon">📤</div>
+        <div className="upload-icon">
+          <Upload size={48} strokeWidth={1.5} />
+        </div>
         <h3>Drag incident logs here</h3>
         <p>Supported formats: .log, .txt, .json, .csv</p>
         <p className="upload-hint">or click to select</p>
