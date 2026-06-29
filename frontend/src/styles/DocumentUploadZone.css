@@ -1,0 +1,78 @@
+.upload-zone {
+  border: 2px dashed rgba(148, 113, 255, 0.3);
+  border-radius: 12px;
+  padding: 3rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: rgba(148, 113, 255, 0.03);
+}
+
+.upload-zone:hover {
+  border-color: rgba(148, 113, 255, 0.5);
+  background: rgba(148, 113, 255, 0.08);
+}
+
+.upload-zone.dragging {
+  border-color: rgba(148, 113, 255, 0.8);
+  background: rgba(148, 113, 255, 0.15);
+  box-shadow: 0 0 20px rgba(148, 113, 255, 0.2);
+  transform: scale(1.02);
+}
+
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.upload-icon {
+  font-size: 3rem;
+  animation: bounce 2s ease-in-out infinite;
+}
+
+.upload-zone h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #e0e0e0;
+  margin: 0;
+}
+
+.upload-zone p {
+  margin: 0;
+  color: #a0a0a0;
+  font-size: 0.875rem;
+}
+
+.upload-hint {
+  color: #9471ff;
+  font-weight: 500;
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@media (max-width: 768px) {
+  .upload-zone {
+    padding: 2rem 1rem;
+  }
+
+  .upload-icon {
+    font-size: 2.5rem;
+  }
+
+  .upload-zone h3 {
+    font-size: 1.1rem;
+  }
+
+  .upload-zone p {
+    font-size: 0.8rem;
+  }
+}

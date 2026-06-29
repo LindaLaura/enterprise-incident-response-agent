@@ -5,7 +5,7 @@ Handles semantic search and retrieval of relevant documentation chunks.
 """
 
 from typing import List, Dict, Any, Optional
-from chroma_db_manager import ChromaDBManager
+from .chroma_db_manager import ChromaDBManager
 
 
 class RAGRetriever:

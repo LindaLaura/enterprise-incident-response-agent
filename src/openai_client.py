@@ -84,3 +84,7 @@ class OpenAIClient:
                 raise Exception(f"Unexpected error during OpenAI API call: {e}")
 
         raise Exception(f"Failed to generate response after {self.retry_attempts} attempts. Last error: {last_error}")
+
+    def analyze(self, prompt: str) -> str:
+        """Alias for generate method (backward compatibility)."""
+        return self.generate(prompt)

@@ -11,9 +11,9 @@ Orchestrates the prompt chain for incident analysis:
 from typing import Dict, Any, Optional
 import json
 from datetime import datetime
-from prompts import STRUCTURE_REPORT_PROMPT, EXTRACT_INFORMATION_PROMPT, ANALYZE_ROOT_CAUSE_PROMPT, GENERATE_RECOMMENDATIONS_PROMPT
-from rag_retriever import RAGRetriever
-from memory_manager import MemoryManager
+from .prompts import STRUCTURE_REPORT_PROMPT, EXTRACT_INFORMATION_PROMPT, ANALYZE_ROOT_CAUSE_PROMPT, GENERATE_RECOMMENDATIONS_PROMPT
+from .rag_retriever import RAGRetriever
+from .memory_manager import MemoryManager
 
 
 class IncidentAnalysisChain:
@@ -243,6 +243,7 @@ class IncidentAnalysisChain:
                 "raw_response": response,
                 "parse_error": str(e)
             }
+    
     def _format_rag_context(self) -> str:
         """Format RAG context for prompt."""
         if not self.rag_context_used['documents']:

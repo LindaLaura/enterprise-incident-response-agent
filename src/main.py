@@ -22,10 +22,10 @@ else:
     # Fallback to searching default locations
     load_dotenv(override=True) 
 
-from openai_client import OpenAIClient
-from anthropic_client import AnthropicClient
-from incident_chain import IncidentAnalysisChain
-from prompts import EXTRACT_INFORMATION_PROMPT
+from .openai_client import OpenAIClient
+from .anthropic_client import AnthropicClient
+from .incident_chain import IncidentAnalysisChain
+from .prompts import EXTRACT_INFORMATION_PROMPT
 
 def main():
     """Main CLI entry point."""

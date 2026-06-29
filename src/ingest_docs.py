@@ -17,8 +17,8 @@ if ENV_FILE.exists():
 else:
     load_dotenv(override=True)
 
-from document_processor import DocumentProcessor
-from chroma_db_manager import ChromaDBManager
+from .document_processor import DocumentProcessor
+from .chroma_db_manager import ChromaDBManager
 
 
 def ingest_documents(docs_dir: Path, reset: bool = False):

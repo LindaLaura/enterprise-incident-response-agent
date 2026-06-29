@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 import chromadb
 from chromadb.config import Settings
 from openai import OpenAI
-from document_processor import DocumentChunk
+from .document_processor import DocumentChunk
 
 
 class ChromaDBManager:

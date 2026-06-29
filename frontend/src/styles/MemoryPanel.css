@@ -1,0 +1,199 @@
+.memory-panel {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 113, 255, 0.2);
+  border-radius: 12px;
+  overflow: hidden;
+  animation: slideInUp 0.5s ease-out 0.3s both;
+}
+
+.memory-panel .panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem;
+  border-bottom: 1px solid rgba(148, 113, 255, 0.1);
+}
+
+.memory-panel .panel-header h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #9471ff;
+  margin: 0;
+}
+
+.memory-panel .panel-badge {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  background: rgba(148, 113, 255, 0.2);
+  border-radius: 20px;
+  font-size: 0.75rem;
+  color: #9471ff;
+  font-weight: 600;
+}
+
+.memory-panel .no-data {
+  padding: 2rem;
+  text-align: center;
+  color: #a0a0a0;
+  font-size: 0.95rem;
+}
+
+.incidents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.incident-item {
+  background: rgba(148, 113, 255, 0.05);
+  border: 1px solid rgba(148, 113, 255, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.incident-item:hover {
+  background: rgba(148, 113, 255, 0.1);
+  border-color: rgba(148, 113, 255, 0.2);
+}
+
+.incident-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.incident-info {
+  flex: 1;
+}
+
+.incident-id {
+  font-weight: 600;
+  color: #e0e0e0;
+  margin-bottom: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.incident-meta {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.similarity-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background: rgba(168, 85, 247, 0.15);
+  border-radius: 4px;
+  color: #a855f7;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.resolution-time {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  background: rgba(59, 130, 246, 0.15);
+  border-radius: 4px;
+  color: #3b82f6;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.incident-header .expand-btn {
+  background: none;
+  border: none;
+  color: #9471ff;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.5rem;
+  transition: transform 0.2s ease;
+}
+
+.incident-header .expand-btn:hover {
+  transform: scale(1.2);
+}
+
+.incident-details {
+  padding: 0 1rem 1rem 1rem;
+  border-top: 1px solid rgba(148, 113, 255, 0.1);
+  animation: slideInUp 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.detail-section {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 0.75rem;
+}
+
+.detail-label {
+  font-size: 0.75rem;
+  color: #a0a0a0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.detail-value {
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.memory-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+  padding: 1rem;
+  border-top: 1px solid rgba(148, 113, 255, 0.1);
+  background: rgba(148, 113, 255, 0.02);
+}
+
+.memory-stats .stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.memory-stats .stat-label {
+  font-size: 0.75rem;
+  color: #a0a0a0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.memory-stats .stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #9471ff;
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 768px) {
+  .incidents-list {
+    max-height: 300px;
+  }
+
+  .memory-panel .panel-header {
+    padding: 1rem;
+  }
+
+  .incident-id {
+    font-size: 0.9rem;
+  }
+
+  .memory-stats {
+    grid-template-columns: 1fr;
+  }
+}
