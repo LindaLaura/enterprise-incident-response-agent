@@ -4,7 +4,6 @@ import '../styles/Dashboard.css';
 
 const Dashboard = () => {
   const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchStats();
@@ -17,10 +16,8 @@ const Dashboard = () => {
       const response = await fetch('/api/stats');
       const data = await response.json();
       setStats(data);
-      setLoading(false);
     } catch (error) {
       console.error('Failed to fetch stats:', error);
-      setLoading(false);
     }
   };
 

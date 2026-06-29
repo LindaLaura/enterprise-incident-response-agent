@@ -12,11 +12,14 @@ function App() {
 
   useEffect(() => {
     connectWebSocket();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const connectWebSocket = () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
+    const host = window.location.hostname;
+    const port = window.location.port === '3000' ? '8000' : window.location.port || '8000';
+    const wsUrl = `${protocol}//${host}:${port}/ws/chat`;
 
     try {
       wsRef.current = new WebSocket(wsUrl);
