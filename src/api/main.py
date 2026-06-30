@@ -21,6 +21,7 @@ import json
 import asyncio
 from typing import List, Dict, Any
 import logging
+from datetime import datetime
 
 from ..memory_manager import MemoryManager
 from ..rag_retriever import RAGRetriever
@@ -307,8 +308,25 @@ async def analyze_incident(user_input: str) -> str:
         try:
             result = await agent_manager.run_analysis(user_input, update_agent_progress)
 
-            # Get final report and convert to string for chat response
+            # Get final report
             final_report = result or {}
+
+            # Save incident to memory
+            try:
+                incident_id = final_report.get('incident_id', f'INC-{int(datetime.now().timestamp())}')
+                memory_manager.save_incident(
+                    incident_id=incident_id,
+                    summary=final_report.get('summary', 'Analysis completed'),
+                    root_cause=final_report.get('root_cause', 'Unknown'),
+                    recommendations=final_report.get('recommendations', {}).get('immediate_actions', []),
+                    severity=final_report.get('severity', 'MEDIUM'),
+                    affected_services=final_report.get('affected_systems', [])
+                )
+                logger.info(f"✅ Saved incident {incident_id} to memory")
+            except Exception as save_error:
+                logger.warning(f"⚠️ Failed to save incident: {save_error}")
+
+            # Convert to string for chat response
             response = f"""
 ## Incident Analysis Report
 

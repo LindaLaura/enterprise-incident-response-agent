@@ -178,19 +178,8 @@ const Dashboard = ({ wsRef }) => {
   };
 
   const handleSendMessage = () => {
-    if (!inputMessage.trim() || !wsRef?.current) return;
-
-    const userMsg = inputMessage.trim();
-    setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-    setInputMessage('');
-    setLoading(true);
-
-    console.log('📤 Sending message via WebSocket:', userMsg);
-    wsRef.current.send(JSON.stringify({
-      type: 'message',
-      content: userMsg,
-      timestamp: new Date().toISOString()
-    }));
+    // Chat disabled - do nothing
+    return;
   };
 
   const handleGenerateReport = async (format) => {
@@ -280,24 +269,33 @@ const Dashboard = ({ wsRef }) => {
       const result = await response.json();
       console.log('✅ File uploaded:', result);
 
-      // Add user message to chat
-      const userMsg = `Analyze these logs: ${uploadedFile.name}`;
-      setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
-
-      // Send analysis request via WebSocket to trigger investigation pipeline
+      // Don't add to chat - just trigger analysis
       if (wsRef?.current) {
         console.log('🔍 Starting investigation pipeline...');
+        // Don't send logs to chat - send a marker message instead
         wsRef.current.send(JSON.stringify({
           type: 'message',
-          content: userMsg,
+          content: `Analyze these logs: ${uploadedFile.name}`,
           timestamp: new Date().toISOString()
         }));
         setLoading(true);
 
-        // Poll for latest incident after analysis completes
+        // Poll for latest incident after analysis completes (longer timeout for agent pipeline)
         setTimeout(() => {
+          console.log('📊 Fetching latest incident after analysis...');
           fetchChartData();  // This fetches latest incident
-        }, 3000);
+        }, 5000);
+
+        // Continue polling every 2 seconds for up to 15 seconds
+        let pollCount = 0;
+        const pollInterval = setInterval(() => {
+          if (pollCount >= 5) {
+            clearInterval(pollInterval);
+            return;
+          }
+          fetchChartData();
+          pollCount++;
+        }, 2000);
       }
 
       setUploading(false);
