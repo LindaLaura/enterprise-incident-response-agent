@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, BookOpen, Brain, Bot, Clock, AlertTriangle, Upload, CheckCircle, MessageSquare, Send } from 'lucide-react';
+import ReportPreviewModal from '../components/ReportPreviewModal';
 import '../styles/Dashboard.css';
 
 const Dashboard = ({ wsRef }) => {
@@ -17,8 +18,9 @@ const Dashboard = ({ wsRef }) => {
   const [progressData, setProgressData] = useState(null);
   const [agentData, setAgentData] = useState(null);
   const [incidentStats, setIncidentStats] = useState(null);
-  const [evidenceData, setEvidenceData] = useState(null); 
-  
+  const [evidenceData, setEvidenceData] = useState(null);
+  const [reportModal, setReportModal] = useState(null);
+
   useEffect(() => {
     fetchStats();
     fetchChartData();
@@ -140,15 +142,20 @@ const Dashboard = ({ wsRef }) => {
     if (!wsRef || !wsRef.current) return;
 
     const handleMessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log('💬 WebSocket message received:', data);
+      try {
+        const data = JSON.parse(event.data);
+        console.log('💬 WebSocket:', data.type, data.content?.substring(0, 50));
 
-      if (data.type === 'message') {
-        setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
-        setLoading(false);
-      } else if (data.type === 'error') {
-        setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${data.content}` }]);
-        setLoading(false);
+        if (data.type === 'message') {
+          setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
+          setLoading(false);
+        } else if (data.type === 'error') {
+          setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ ${data.content}` }]);
+          setLoading(false);
+        }
+        // Ignore: loading, history, stats
+      } catch (e) {
+        console.error('WebSocket parse error:', e);
       }
     };
 
@@ -187,27 +194,44 @@ const Dashboard = ({ wsRef }) => {
   };
 
   const handleGenerateReport = async (format) => {
-    if (!latestIncident || !latestIncident.incident_id) {
-      alert('No incident to export');
+    const incident = latestIncident;
+    if (!incident || !incident.incident_id) {
+      alert('No incident analyzed yet. Upload and analyze logs first.');
       return;
     }
 
+    // Show preview modal with incident data
+    setReportModal({
+      format,
+      incident
+    });
+  };
+
+  const handleDownloadReport = async () => {
+    const { format, incident } = reportModal;
+
     try {
-      // Generate report
       const genResponse = await fetch('/api/report/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          incident_id: latestIncident.incident_id,
+          incident_id: incident.incident_id,
           format: format
         })
       });
 
-      if (!genResponse.ok) throw new Error('Failed to generate report');
+      if (!genResponse.ok) {
+        const error = await genResponse.json();
+        throw new Error(error.detail || 'Failed to generate report');
+      }
 
       const genData = await genResponse.json();
+      console.log('Report generated:', genData);
 
-      // Download report
+      if (!genData.report_id) {
+        throw new Error('No report ID returned');
+      }
+
       const dlResponse = await fetch(`/api/report/download/${genData.report_id}`);
       if (!dlResponse.ok) throw new Error('Failed to download report');
 
@@ -215,16 +239,16 @@ const Dashboard = ({ wsRef }) => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = genData.filename || `report.${format}`;
+      link.download = genData.filename || `incident_${incident.incident_id}_report.${format}`;
       document.body.appendChild(link);
       link.click();
-      window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
 
-      console.log(`✅ Downloaded ${format.toUpperCase()} report`);
+      console.log(`✅ Downloaded ${format.toUpperCase()}`);
     } catch (error) {
-      console.error(`Failed to generate/download ${format} report:`, error);
-      alert(`Failed to download ${format.toUpperCase()} report: ${error.message}`);
+      console.error(`Report error:`, error);
+      alert(`Failed: ${error.message}`);
     }
   };
 
@@ -235,6 +259,13 @@ const Dashboard = ({ wsRef }) => {
     }
 
     setUploading(true);
+
+    // Reset states for new analysis
+    setProgressData(null);
+    setAgentData(null);
+    setLatestIncident(null);
+    setEvidenceData(null);
+
     try {
       const formData = new FormData();
       formData.append('file', uploadedFile);
@@ -262,6 +293,11 @@ const Dashboard = ({ wsRef }) => {
           timestamp: new Date().toISOString()
         }));
         setLoading(true);
+
+        // Poll for latest incident after analysis completes
+        setTimeout(() => {
+          fetchChartData();  // This fetches latest incident
+        }, 3000);
       }
 
       setUploading(false);
@@ -385,9 +421,9 @@ const Dashboard = ({ wsRef }) => {
               <button
                 className="btn-primary"
                 onClick={handleAnalyzeClick}
-                disabled={uploading}
+                disabled={uploading || !uploadedFile}
               >
-                {uploading ? 'Uploading...' : 'Analyze Incident →'}
+                {uploading ? 'Uploading...' : !uploadedFile ? 'Upload file first ↑' : 'Analyze Incident →'}
               </button>
               <p className="upload-support">Supports .log, .txt, .json, .pdf, .csv</p>
             </div>
@@ -495,10 +531,16 @@ const Dashboard = ({ wsRef }) => {
               <div className="chat-header">
                 <div className="chat-title">
                   <span>🤖</span> AI Assistant
-                  <span className="online-badge">●</span>
+                  <span style={{ fontSize: '0.75rem', marginLeft: '0.5rem', color: '#fbbf24', fontWeight: 'bold' }}>WIP</span>
                 </div>
               </div>
               <div className="chat-messages">
+                <div className="message assistant">
+                  <div className="message-bubble" style={{ backgroundColor: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d' }}>
+                    ⚠️ <strong>Chat feature is work in progress</strong><br/>
+                    Analysis results are shown in the cards above. Full conversational AI coming soon.
+                  </div>
+                </div>
                 {messages.map((msg, idx) => (
                   <div key={idx} className={`message ${msg.role}`}>
                     <div className="message-bubble">{msg.content}</div>
@@ -515,12 +557,14 @@ const Dashboard = ({ wsRef }) => {
               <div className="chat-input">
                 <input
                   type="text"
-                  placeholder="Ask the agent anything..."
+                  placeholder="Chat coming soon... View analysis results in cards above ↑"
                   value={inputMessage}
                   onChange={(e) => setInputMessage(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                  disabled
+                  style={{ opacity: 0.5, cursor: 'not-allowed' }}
                 />
-                <button onClick={handleSendMessage} className="send-btn">
+                <button onClick={handleSendMessage} className="send-btn" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>
                   <Send size={18} />
                 </button>
               </div>
@@ -655,6 +699,16 @@ const Dashboard = ({ wsRef }) => {
           </div>
         </div>
       </div>
+
+      {/* Report Preview Modal */}
+      {reportModal && (
+        <ReportPreviewModal
+          incident={reportModal.incident}
+          format={reportModal.format}
+          onClose={() => setReportModal(null)}
+          onDownload={handleDownloadReport}
+        />
+      )}
     </div>
   );
 };

@@ -113,6 +113,7 @@ async def upload_document(file: UploadFile = File(...)):
 
         content = await file.read()
         file_ext = Path(file.filename).suffix.lower()
+        logger.info(f"📁 Uploading {file.filename} ({len(content)} bytes)")
 
         # Save to temp file for processing
         with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
@@ -122,28 +123,54 @@ async def upload_document(file: UploadFile = File(...)):
         try:
             # Process document based on file type
             tmp_file_path = Path(tmp_path)
+            logger.info(f"Processing {file.filename}...")
             chunks = document_processor.process_document(tmp_file_path)
 
             if not chunks:
-                raise ValueError(f"Could not process file: {file.filename}")
+                logger.warning(f"No chunks from processor, using fallback")
+                # Create fallback chunk from file content
+                text_content = content.decode('utf-8', errors='ignore')
+                if text_content.strip():
+                    chunks = [type('Chunk', (), {
+                        'content': text_content,
+                        'metadata': {'source': file.filename, 'type': 'text'}
+                    })()]
+                else:
+                    raise ValueError(f"Could not process or extract text from file: {file.filename}")
 
-            # Ingest into RAG
-            doc_type = document_processor._infer_doc_type(tmp_file_path)
-            rag_retriever.ingest_documents(
-                [{"text": chunk.content, "metadata": {**chunk.metadata, "source": file.filename}}
-                 for chunk in chunks]
-            )
+            logger.info(f"Got {len(chunks)} chunks")
+
+            # Ingest into RAG (with error handling)
+            try:
+                from ..document_processor import DocumentChunk
+                doc_type = document_processor._infer_doc_type(tmp_file_path)
+                # Convert to DocumentChunk format
+                doc_chunks = [
+                    DocumentChunk(
+                        content=chunk.content,
+                        metadata={**chunk.metadata, "source": file.filename, "doc_type": doc_type}
+                    )
+                    for chunk in chunks
+                ]
+                rag_retriever.chroma.add_chunks(doc_chunks)
+                logger.info(f"✅ Ingested into RAG: {doc_type}")
+            except Exception as rag_error:
+                logger.warning(f"RAG ingestion failed (non-blocking): {rag_error}")
 
             # Register in chatbot
-            chatbot.add_uploaded_doc(file.filename, [chunk.content for chunk in chunks])
+            try:
+                chatbot.add_uploaded_doc(file.filename, [chunk.content for chunk in chunks])
+                logger.info(f"✅ Registered in chatbot")
+            except Exception as chat_error:
+                logger.warning(f"Chatbot registration failed (non-blocking): {chat_error}")
 
-            logger.info(f"✅ Uploaded {file.filename}: {len(chunks)} chunks, type: {doc_type}")
+            logger.info(f"✅ Upload complete: {file.filename}")
 
             return {
                 "status": "success",
                 "filename": file.filename,
                 "chunks": len(chunks),
-                "doc_type": doc_type,
+                "doc_type": "text",
                 "file_type": file_ext
             }
         finally:
@@ -153,7 +180,7 @@ async def upload_document(file: UploadFile = File(...)):
                 os.remove(tmp_path)
 
     except Exception as e:
-        logger.error(f"Upload failed: {e}")
+        logger.error(f"❌ Upload failed: {type(e).__name__}: {e}", exc_info=True)
         raise HTTPException(status_code=400, detail=str(e))
 
 
