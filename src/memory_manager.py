@@ -9,6 +9,8 @@ import json
 import fcntl
 import time
 import shutil
+import sqlite3
+import uuid
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
@@ -80,10 +82,18 @@ class MemoryManager:
         self.backup_dir = self.memory_dir / "backups"
         self.backup_dir.mkdir(exist_ok=True)
 
+        # Reports storage
+        self.reports_db_file = self.memory_dir / "reports.db"
+        self.reports_dir = self.memory_dir / "reports"
+        self.reports_dir.mkdir(exist_ok=True)
+
         # Lock configuration
         self.max_retries = 10
         self.lock_timeout = 30
         self.max_backups = 7
+
+        # Initialize SQLite database for reports
+        self._init_reports_db()
 
         self.long_term = self._load_long_term()
 
@@ -542,3 +552,231 @@ class MemoryManager:
                 return keyword
 
         return 'other'
+
+    # ═══ REPORT MANAGEMENT (SQLite) ═══
+
+    def _init_reports_db(self):
+        """Initialize SQLite database schema for reports."""
+        try:
+            conn = sqlite3.connect(str(self.reports_db_file))
+            cursor = conn.cursor()
+
+            # Create reports table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS reports (
+                    id TEXT PRIMARY KEY,
+                    incident_id TEXT NOT NULL,
+                    format TEXT NOT NULL,
+                    file_path TEXT NOT NULL,
+                    file_size INTEGER,
+                    created_at TEXT NOT NULL,
+                    download_count INTEGER DEFAULT 0,
+                    created_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+
+            # Create index for faster queries
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_incident_id
+                ON reports(incident_id)
+            ''')
+
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_created_at
+                ON reports(created_at)
+            ''')
+
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"❌ Failed to initialize reports database: {e}")
+            raise
+
+    def save_report(
+        self,
+        incident_id: str,
+        format: str,
+        file_path: str,
+        file_size: int = 0
+    ) -> str:
+        """
+        Save report metadata to SQLite database.
+
+        Args:
+            incident_id: Associated incident ID
+            format: Report format (pdf, json, csv)
+            file_path: Path to saved report file
+            file_size: Size of the file in bytes
+
+        Returns:
+            Report ID for later retrieval
+        """
+        report_id = str(uuid.uuid4())
+        created_at = datetime.now().isoformat()
+
+        try:
+            conn = sqlite3.connect(str(self.reports_db_file))
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                INSERT INTO reports
+                (id, incident_id, format, file_path, file_size, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (report_id, incident_id, format, file_path, file_size, created_at))
+
+            conn.commit()
+            conn.close()
+
+            print(f"✅ Report saved: {report_id} ({format})")
+            return report_id
+        except Exception as e:
+            print(f"❌ Failed to save report metadata: {e}")
+            raise
+
+    def get_report(self, report_id: str) -> Optional[Dict[str, Any]]:
+        """Get report metadata by ID."""
+        try:
+            conn = sqlite3.connect(str(self.reports_db_file))
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                SELECT * FROM reports WHERE id = ?
+            ''', (report_id,))
+
+            row = cursor.fetchone()
+            conn.close()
+
+            if row:
+                return dict(row)
+            return None
+        except Exception as e:
+            print(f"❌ Failed to get report: {e}")
+            return None
+
+    def get_reports_by_incident(self, incident_id: str) -> List[Dict[str, Any]]:
+        """Get all reports for a specific incident."""
+        try:
+            conn = sqlite3.connect(str(self.reports_db_file))
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                SELECT * FROM reports
+                WHERE incident_id = ?
+                ORDER BY created_at DESC
+            ''', (incident_id,))
+
+            rows = cursor.fetchall()
+            conn.close()
+
+            return [dict(row) for row in rows]
+        except Exception as e:
+            print(f"❌ Failed to get reports by incident: {e}")
+            return []
+
+    def list_reports(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+        format_filter: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        List all reports with optional filtering.
+
+        Args:
+            limit: Maximum number of reports to return
+            offset: Offset for pagination
+            format_filter: Optional format filter (pdf, json, csv)
+
+        Returns:
+            List of report metadata dictionaries
+        """
+        try:
+            conn = sqlite3.connect(str(self.reports_db_file))
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+
+            if format_filter:
+                cursor.execute('''
+                    SELECT * FROM reports
+                    WHERE format = ?
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                ''', (format_filter, limit, offset))
+            else:
+                cursor.execute('''
+                    SELECT * FROM reports
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                ''', (limit, offset))
+
+            rows = cursor.fetchall()
+            conn.close()
+
+            return [dict(row) for row in rows]
+        except Exception as e:
+            print(f"❌ Failed to list reports: {e}")
+            return []
+
+    def increment_download_count(self, report_id: str) -> bool:
+        """Increment download count for a report."""
+        try:
+            conn = sqlite3.connect(str(self.reports_db_file))
+            cursor = conn.cursor()
+
+            cursor.execute('''
+                UPDATE reports
+                SET download_count = download_count + 1
+                WHERE id = ?
+            ''', (report_id,))
+
+            conn.commit()
+            conn.close()
+            return True
+        except Exception as e:
+            print(f"❌ Failed to update download count: {e}")
+            return False
+
+    def get_report_stats(self) -> Dict[str, Any]:
+        """Get statistics about saved reports."""
+        try:
+            conn = sqlite3.connect(str(self.reports_db_file))
+            cursor = conn.cursor()
+
+            # Total reports
+            cursor.execute('SELECT COUNT(*) FROM reports')
+            total_reports = cursor.fetchone()[0]
+
+            # Reports by format
+            cursor.execute('''
+                SELECT format, COUNT(*) as count
+                FROM reports
+                GROUP BY format
+            ''')
+            by_format = {row[0]: row[1] for row in cursor.fetchall()}
+
+            # Total downloads
+            cursor.execute('SELECT SUM(download_count) FROM reports')
+            total_downloads = cursor.fetchone()[0] or 0
+
+            # Total storage used
+            cursor.execute('SELECT SUM(file_size) FROM reports')
+            total_size_bytes = cursor.fetchone()[0] or 0
+
+            conn.close()
+
+            return {
+                'total_reports': total_reports,
+                'by_format': by_format,
+                'total_downloads': total_downloads,
+                'total_size_mb': round(total_size_bytes / (1024 * 1024), 2)
+            }
+        except Exception as e:
+            print(f"❌ Failed to get report stats: {e}")
+            return {
+                'total_reports': 0,
+                'by_format': {},
+                'total_downloads': 0,
+                'total_size_mb': 0
+            }

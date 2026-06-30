@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   BarChart3,
   Zap,
@@ -15,6 +15,7 @@ import '../styles/Sidebar.css';
 
 const Sidebar = ({ activePage, onPageChange }) => {
   const [collapsed, setCollapsed] = useState(false);
+  const [recentIncidents, setRecentIncidents] = useState([]);
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: BarChart3, section: 'main' },
@@ -38,12 +39,56 @@ const Sidebar = ({ activePage, onPageChange }) => {
     return acc;
   }, {});
 
+  useEffect(() => {
+    fetchRecentIncidents();
+    const interval = setInterval(fetchRecentIncidents, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchRecentIncidents = async () => {
+    try {
+      const response = await fetch('/api/incidents');
+      const data = await response.json();
+
+      if (data.incidents && Array.isArray(data.incidents)) {
+        // Get last 4 incidents, sorted by timestamp (most recent first)
+        const sorted = [...data.incidents]
+          .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+          .slice(0, 4);
+
+        setRecentIncidents(sorted);
+      }
+    } catch (error) {
+      console.error('Failed to fetch recent incidents:', error);
+    }
+  };
+
+  const getTimeAgo = (timestamp) => {
+    try {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const seconds = Math.floor((now - date) / 1000);
+
+      if (seconds < 60) return `${seconds}s ago`;
+      if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+      if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+      return `${Math.floor(seconds / 86400)}d ago`;
+    } catch {
+      return 'recently';
+    }
+  };
+
+  const getSeverityClass = (severity) => {
+    if (!severity) return 'low';
+    return severity.toLowerCase();
+  };
+
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-header">
         <div className="logo">
           <Zap className="logo-icon" size={24} strokeWidth={2.5} />
-          {!collapsed && <span className="logo-text">EIRA</span>}
+          {!collapsed && <span className="logo-text">Enterprise Incident Respone Agent</span>}
         </div>
         <button
           className="collapse-btn"
@@ -84,38 +129,27 @@ const Sidebar = ({ activePage, onPageChange }) => {
           <>
             <div className="section-label">Recent Incidents</div>
             <div className="recent-incidents">
-              <div className="incident-item critical">
-                <div className="incident-indicator"></div>
-                <div className="incident-content">
-                  <p className="incident-name">Payment Failure</p>
-                  <p className="incident-meta">Critical</p>
-                </div>
-                <p className="incident-time">2m ago</p>
-              </div>
-              <div className="incident-item high">
-                <div className="incident-indicator"></div>
-                <div className="incident-content">
-                  <p className="incident-name">Checkout API 500</p>
-                  <p className="incident-meta">High</p>
-                </div>
-                <p className="incident-time">1h ago</p>
-              </div>
-              <div className="incident-item medium">
-                <div className="incident-indicator"></div>
-                <div className="incident-content">
-                  <p className="incident-name">User Login Issue</p>
-                  <p className="incident-meta">Medium</p>
-                </div>
-                <p className="incident-time">3h ago</p>
-              </div>
-              <div className="incident-item low">
-                <div className="incident-indicator"></div>
-                <div className="incident-content">
-                  <p className="incident-name">Email Service Down</p>
-                  <p className="incident-meta">Low</p>
-                </div>
-                <p className="incident-time">1d ago</p>
-              </div>
+              {recentIncidents.length > 0 ? (
+                recentIncidents.map((incident) => (
+                  <div
+                    key={incident.incident_id}
+                    className={`incident-item ${getSeverityClass(incident.severity)}`}
+                  >
+                    <div className="incident-indicator"></div>
+                    <div className="incident-content">
+                      <p className="incident-name">
+                        {incident.summary?.substring(0, 25) || incident.incident_id}
+                      </p>
+                      <p className="incident-meta">{incident.severity || 'Unknown'}</p>
+                    </div>
+                    <p className="incident-time">{getTimeAgo(incident.timestamp)}</p>
+                  </div>
+                ))
+              ) : (
+                <p style={{ color: '#a0a0a0', fontSize: '0.85rem', padding: '1rem' }}>
+                  No incidents yet
+                </p>
+              )}
             </div>
           </>
         )}

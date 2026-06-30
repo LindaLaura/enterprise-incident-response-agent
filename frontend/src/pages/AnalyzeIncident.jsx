@@ -105,6 +105,48 @@ const AnalyzeIncident = ({ wsRef }) => {
     setLogs(demoLogs);
   };
 
+  const handleGenerateReport = async (format) => {
+    if (!analysis || !analysis.full_analysis?.incident_id) {
+      alert('No analysis available to export');
+      return;
+    }
+
+    try {
+      // Generate report
+      const genResponse = await fetch('/api/report/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          incident_id: analysis.full_analysis.incident_id,
+          format: format
+        })
+      });
+
+      if (!genResponse.ok) throw new Error('Failed to generate report');
+
+      const genData = await genResponse.json();
+
+      // Download report
+      const dlResponse = await fetch(`/api/report/download/${genData.report_id}`);
+      if (!dlResponse.ok) throw new Error('Failed to download report');
+
+      const blob = await dlResponse.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = genData.filename || `report.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+
+      console.log(`✅ Downloaded ${format.toUpperCase()} report`);
+    } catch (error) {
+      console.error(`Failed to generate/download ${format} report:`, error);
+      alert(`Failed to download ${format.toUpperCase()} report: ${error.message}`);
+    }
+  };
+
   return (
     <div className="analyze-incident">
       <div className="analyze-container">
@@ -187,16 +229,39 @@ const AnalyzeIncident = ({ wsRef }) => {
             )}
 
             {!analyzing && (
-              <button
-                onClick={() => {
-                  setAnalyzing(false);
-                  setAnalysis(null);
-                  setLogs('');
-                }}
-                className="btn-reset"
-              >
-                ← Analyze Another Incident
-              </button>
+              <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', flexWrap: 'wrap' }}>
+                <button
+                  onClick={() => handleGenerateReport('pdf')}
+                  className="btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  📄 Download PDF
+                </button>
+                <button
+                  onClick={() => handleGenerateReport('json')}
+                  className="btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  {'{}'} Export JSON
+                </button>
+                <button
+                  onClick={() => handleGenerateReport('csv')}
+                  className="btn-primary"
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  📊 Export CSV
+                </button>
+                <button
+                  onClick={() => {
+                    setAnalyzing(false);
+                    setAnalysis(null);
+                    setLogs('');
+                  }}
+                  className="btn-secondary"
+                >
+                  ← Analyze Another Incident
+                </button>
+              </div>
             )}
           </div>
         ) : null}

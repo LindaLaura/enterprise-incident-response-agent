@@ -5,6 +5,8 @@ Handles loading, chunking, and preprocessing of documents for RAG.
 """
 
 import os
+import json
+import csv
 from pathlib import Path
 from typing import List, Dict, Any
 import re
@@ -72,6 +74,86 @@ class DocumentProcessor:
         except Exception as e:
             print(f"⚠️  Error reading PDF {file_path}: {e}")
             return ""
+
+    def load_json_file(self, file_path: Path) -> str:
+        """
+        Load and flatten content from a JSON file.
+
+        Args:
+            file_path: Path to JSON file
+
+        Returns:
+            Flattened JSON content as formatted string
+        """
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            return self._flatten_json(data, file_path.name)
+        except json.JSONDecodeError as e:
+            print(f"⚠️  Invalid JSON in {file_path}: {e}")
+            return ""
+        except Exception as e:
+            print(f"⚠️  Error reading JSON {file_path}: {e}")
+            return ""
+
+    def load_csv_file(self, file_path: Path) -> str:
+        """
+        Load and format content from a CSV file.
+
+        Args:
+            file_path: Path to CSV file
+
+        Returns:
+            Formatted CSV content as string
+        """
+        try:
+            rows = []
+            with open(file_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                if reader.fieldnames:
+                    rows.append(f"Columns: {', '.join(reader.fieldnames)}")
+                    for i, row in enumerate(reader, 1):
+                        row_str = " | ".join(f"{k}: {v}" for k, v in row.items())
+                        rows.append(f"Row {i}: {row_str}")
+
+            return '\n'.join(rows)
+        except Exception as e:
+            print(f"⚠️  Error reading CSV {file_path}: {e}")
+            return ""
+
+    def _flatten_json(self, data: Any, filename: str, prefix: str = "") -> str:
+        """
+        Recursively flatten JSON structure into readable text.
+
+        Args:
+            data: JSON data to flatten
+            filename: Name of the source file
+            prefix: Current key prefix for nested objects
+
+        Returns:
+            Flattened JSON as formatted string
+        """
+        lines = []
+
+        if isinstance(data, dict):
+            for key, value in data.items():
+                new_prefix = f"{prefix}.{key}" if prefix else key
+                if isinstance(value, (dict, list)):
+                    lines.append(self._flatten_json(value, filename, new_prefix))
+                else:
+                    lines.append(f"{new_prefix}: {value}")
+        elif isinstance(data, list):
+            for i, item in enumerate(data):
+                new_prefix = f"{prefix}[{i}]"
+                if isinstance(item, (dict, list)):
+                    lines.append(self._flatten_json(item, filename, new_prefix))
+                else:
+                    lines.append(f"{new_prefix}: {item}")
+        else:
+            lines.append(f"{prefix}: {data}")
+
+        return '\n'.join(lines)
 
     def chunk_text(self, text: str, metadata: Dict[str, Any]) -> List[DocumentChunk]:
         """
@@ -144,13 +226,19 @@ class DocumentProcessor:
         Returns:
             List of DocumentChunk objects
         """
+        file_ext = file_path.suffix.lower()
+
         # Load content based on file type
-        if file_path.suffix.lower() == '.pdf':
+        if file_ext == '.pdf':
             content = self.load_pdf_file(file_path)
-        elif file_path.suffix.lower() in ['.txt', '.md']:
+        elif file_ext in ['.txt', '.md', '.log']:
             content = self.load_text_file(file_path)
+        elif file_ext == '.json':
+            content = self.load_json_file(file_path)
+        elif file_ext == '.csv':
+            content = self.load_csv_file(file_path)
         else:
-            print(f"⚠️  Unsupported file type: {file_path.suffix}")
+            print(f"⚠️  Unsupported file type: {file_ext}")
             return []
 
         if not content:
@@ -160,7 +248,7 @@ class DocumentProcessor:
         metadata = {
             'source': str(file_path),
             'filename': file_path.name,
-            'filetype': file_path.suffix.lower(),
+            'filetype': file_ext,
             'doc_type': self._infer_doc_type(file_path)
         }
 
@@ -182,7 +270,7 @@ class DocumentProcessor:
         all_chunks = []
 
         # Find all supported files
-        supported_extensions = ['.txt', '.md', '.pdf']
+        supported_extensions = ['.txt', '.md', '.pdf', '.json', '.csv', '.log']
         files = []
 
         for ext in supported_extensions:

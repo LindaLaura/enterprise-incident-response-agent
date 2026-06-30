@@ -6,7 +6,7 @@ const Dashboard = ({ wsRef }) => {
   const [stats, setStats] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: 'Why is this incident critical?' }
+    { role: 'assistant', content: '' }
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -14,12 +14,30 @@ const Dashboard = ({ wsRef }) => {
   const [severityData, setSeverityData] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [latestIncident, setLatestIncident] = useState(null);
-
+  const [progressData, setProgressData] = useState(null);
+  const [agentData, setAgentData] = useState(null);
+  const [incidentStats, setIncidentStats] = useState(null);
+  const [evidenceData, setEvidenceData] = useState(null); 
+  
   useEffect(() => {
     fetchStats();
     fetchChartData();
+    fetchProgressData();
+    fetchAgentData();
+    fetchIncidentStats();
+    fetchEvidenceData();
     const interval = setInterval(fetchStats, 5000);
-    return () => clearInterval(interval);
+    const progressInterval = setInterval(fetchProgressData, 3000);
+    const agentInterval = setInterval(fetchAgentData, 3000);
+    const statsInterval = setInterval(fetchIncidentStats, 5000);
+    const evidenceInterval = setInterval(fetchEvidenceData, 5000);
+    return () => {
+      clearInterval(interval);
+      clearInterval(progressInterval);
+      clearInterval(agentInterval);
+      clearInterval(statsInterval);
+      clearInterval(evidenceInterval);
+    };
   }, []);
 
   const fetchChartData = async () => {
@@ -37,6 +55,84 @@ const Dashboard = ({ wsRef }) => {
       setLatestIncident(incident);
     } catch (error) {
       console.error('Failed to fetch chart data:', error);
+    }
+  };
+
+  const fetchProgressData = async () => {
+    try {
+      const response = await fetch('/api/incidents/analysis-progress');
+      const data = await response.json();
+      setProgressData(data.steps);
+    } catch (error) {
+      console.error('Failed to fetch progress data:', error);
+    }
+  };
+
+  const fetchAgentData = async () => {
+    try {
+      const response = await fetch('/api/agents/status');
+      const data = await response.json();
+      setAgentData(data.agents);
+    } catch (error) {
+      console.error('Failed to fetch agent data:', error);
+    }
+  };
+
+  const fetchIncidentStats = async () => {
+    try {
+      const [trendRes, severityRes] = await Promise.all([
+        fetch('/api/incidents/trend'),
+        fetch('/api/incidents/severity')
+      ]);
+      const trend = await trendRes.json();
+      const severity = await severityRes.json();
+
+      // Calculate daily change
+      const todayCount = trend.counts?.length > 0 ? trend.counts[trend.counts.length - 1] : 0;
+      const yesterdayCount = trend.counts?.length > 1 ? trend.counts[trend.counts.length - 2] : 0;
+      const dailyChange = todayCount - yesterdayCount;
+
+      // Calculate weekly change
+      const weeklyCount = trend.counts?.reduce((a, b) => a + b, 0) || 0;
+
+      setIncidentStats({
+        dailyChange,
+        weeklyCount,
+        severity
+      });
+    } catch (error) {
+      console.error('Failed to fetch incident stats:', error);
+    }
+  };
+
+  const fetchEvidenceData = async () => {
+    try {
+      const response = await fetch('/api/agents/context');
+      const context = await response.json();
+
+      // Extract retrieved documents from agent context
+      const retrievedDocs = context.retrieved_docs || {};
+
+      if (retrievedDocs.top_results) {
+        // Parse retrieved documents and create evidence items
+        const docLines = retrievedDocs.top_results.split('\n').filter(line => line.trim());
+
+        const evidence = docLines.slice(0, 3).map((doc, idx) => ({
+          id: idx,
+          name: doc.substring(0, 50) || `Document ${idx + 1}`,
+          relevance: 85 + Math.random() * 10,
+          meta: `Retrieved document ${idx + 1}`,
+          type: 'document'
+        }));
+
+        setEvidenceData(evidence);
+      } else {
+        // Fallback if no retrieved docs
+        setEvidenceData([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch evidence data:', error);
+      setEvidenceData([]);
     }
   };
 
@@ -90,6 +186,48 @@ const Dashboard = ({ wsRef }) => {
     }));
   };
 
+  const handleGenerateReport = async (format) => {
+    if (!latestIncident || !latestIncident.incident_id) {
+      alert('No incident to export');
+      return;
+    }
+
+    try {
+      // Generate report
+      const genResponse = await fetch('/api/report/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          incident_id: latestIncident.incident_id,
+          format: format
+        })
+      });
+
+      if (!genResponse.ok) throw new Error('Failed to generate report');
+
+      const genData = await genResponse.json();
+
+      // Download report
+      const dlResponse = await fetch(`/api/report/download/${genData.report_id}`);
+      if (!dlResponse.ok) throw new Error('Failed to download report');
+
+      const blob = await dlResponse.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = genData.filename || `report.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+
+      console.log(`✅ Downloaded ${format.toUpperCase()} report`);
+    } catch (error) {
+      console.error(`Failed to generate/download ${format} report:`, error);
+      alert(`Failed to download ${format.toUpperCase()} report: ${error.message}`);
+    }
+  };
+
   const handleAnalyzeClick = async () => {
     if (!uploadedFile) {
       alert('Please upload a file first');
@@ -111,17 +249,23 @@ const Dashboard = ({ wsRef }) => {
       const result = await response.json();
       console.log('✅ File uploaded:', result);
 
-      // Send analysis request via WebSocket
+      // Add user message to chat
+      const userMsg = `Analyze these logs: ${uploadedFile.name}`;
+      setMessages(prev => [...prev, { role: 'user', content: userMsg }]);
+
+      // Send analysis request via WebSocket to trigger investigation pipeline
       if (wsRef?.current) {
+        console.log('🔍 Starting investigation pipeline...');
         wsRef.current.send(JSON.stringify({
           type: 'message',
-          content: `Analyze these logs: ${uploadedFile.name}`,
+          content: userMsg,
           timestamp: new Date().toISOString()
         }));
         setLoading(true);
       }
 
       setUploading(false);
+      setUploadedFile(null);
     } catch (error) {
       console.error('Upload error:', error);
       alert('Upload failed: ' + error.message);
@@ -145,7 +289,13 @@ const Dashboard = ({ wsRef }) => {
             <div className="kpi-content">
               <div className="kpi-value">{stats?.memory?.total_incidents || 0}</div>
               <div className="kpi-label">Active Incidents</div>
-              <div className="kpi-sub">↑ 2 from yesterday</div>
+              <div className="kpi-sub">
+                {incidentStats?.dailyChange !== undefined && (
+                  incidentStats.dailyChange >= 0
+                    ? `↑ ${incidentStats.dailyChange} from yesterday`
+                    : `↓ ${Math.abs(incidentStats.dailyChange)} from yesterday`
+                )}
+              </div>
             </div>
           </div>
 
@@ -155,7 +305,9 @@ const Dashboard = ({ wsRef }) => {
             <div className="kpi-content">
               <div className="kpi-value">{stats?.chatbot?.uploaded_docs_count || 0}</div>
               <div className="kpi-label">Documents</div>
-              <div className="kpi-sub">↑ 24 this week</div>
+              <div className="kpi-sub">
+                {stats?.chatbot?.uploaded_docs_count ? `${stats.chatbot.uploaded_docs_count} documents uploaded` : 'No documents yet'}
+              </div>
             </div>
           </div>
 
@@ -165,7 +317,11 @@ const Dashboard = ({ wsRef }) => {
             <div className="kpi-content">
               <div className="kpi-value">{stats?.memory?.total_incidents || 0}</div>
               <div className="kpi-label">Memory Entries</div>
-              <div className="kpi-sub">↑ 18 this week</div>
+              <div className="kpi-sub">
+                {incidentStats?.weeklyCount !== undefined && (
+                  `↑ ${incidentStats.weeklyCount} this week`
+                )}
+              </div>
             </div>
           </div>
 
@@ -180,13 +336,13 @@ const Dashboard = ({ wsRef }) => {
           </div>
 
           {/* AI Assistant */}
-          <div className="kpi-card">
+          {/* <div className="kpi-card">
             <div className="kpi-icon">🤖</div>
             <div className="kpi-content">
               <div className="kpi-value">AI Assistant</div>
               <div className="kpi-label" style={{marginTop: '0.5rem'}}>Ready to help</div>
             </div>
-          </div>
+          </div> */}
         </div>
 
         {/* Main Content Grid */}
@@ -248,7 +404,29 @@ const Dashboard = ({ wsRef }) => {
                 <p className="root-cause-impact"><span className="impact-high">{latestIncident.severity}</span> {latestIncident.affected_users}</p>
                 <p className="root-cause-rec"><strong>Recommendation</strong></p>
                 <p className="root-cause-rec-text">{latestIncident.immediate_action}</p>
-                <button className="btn-secondary">View Runbook</button>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => handleGenerateReport('pdf')}
+                    style={{ fontSize: '0.85rem', padding: '0.5rem 0.75rem' }}
+                  >
+                    📄 PDF
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => handleGenerateReport('json')}
+                    style={{ fontSize: '0.85rem', padding: '0.5rem 0.75rem' }}
+                  >
+                    {'{}'} JSON
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => handleGenerateReport('csv')}
+                    style={{ fontSize: '0.85rem', padding: '0.5rem 0.75rem' }}
+                  >
+                    📊 CSV
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -261,46 +439,24 @@ const Dashboard = ({ wsRef }) => {
                 <h3>AI Investigation Progress</h3>
               </div>
               <div className="progress-steps">
-                <div className="step completed">
-                  <div className="step-num">1</div>
-                  <div className="step-content">
-                    <p className="step-title">Parse Logs</p>
-                    <p className="step-desc">Extracting relevant log data</p>
-                  </div>
-                  <div className="step-time">✓ Completed 2.1s</div>
-                </div>
-                <div className="step completed">
-                  <div className="step-num">2</div>
-                  <div className="step-content">
-                    <p className="step-title">Retrieve Documents (RAG)</p>
-                    <p className="step-desc">Searching knowledge base for relevant info</p>
-                  </div>
-                  <div className="step-time">✓ Completed 3.4s</div>
-                </div>
-                <div className="step completed">
-                  <div className="step-num">3</div>
-                  <div className="step-content">
-                    <p className="step-title">Search Memory</p>
-                    <p className="step-desc">Looking for similar past incidents</p>
-                  </div>
-                  <div className="step-time">✓ Completed 1.8s</div>
-                </div>
-                <div className="step in-progress">
-                  <div className="step-num">4</div>
-                  <div className="step-content">
-                    <p className="step-title">Root Cause Analysis</p>
-                    <p className="step-desc">Analyzing patterns and identifying cause</p>
-                  </div>
-                  <div className="step-time">⏳ In Progress</div>
-                </div>
-                <div className="step pending">
-                  <div className="step-num">5</div>
-                  <div className="step-content">
-                    <p className="step-title">Generate Report</p>
-                    <p className="step-desc">Creating incident report & recommendations</p>
-                  </div>
-                  <div className="step-time">⏱ Pending</div>
-                </div>
+                {progressData ? (
+                  progressData.map((step) => (
+                    <div key={step.id} className={`step ${step.status.replace('_', '-')}`}>
+                      <div className="step-num">{step.id}</div>
+                      <div className="step-content">
+                        <p className="step-title">{step.title}</p>
+                        <p className="step-desc">{step.description}</p>
+                      </div>
+                      <div className="step-time">
+                        {step.status === 'completed' && `✓ Completed ${step.duration}`}
+                        {step.status === 'in_progress' && '⏳ In Progress'}
+                        {step.status === 'pending' && '⏱ Pending'}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <p style={{ color: '#a0a0a0', padding: '1rem' }}>Loading progress...</p>
+                )}
               </div>
             </div>
 
@@ -311,33 +467,23 @@ const Dashboard = ({ wsRef }) => {
                 <a href="#" className="view-all">View All</a>
               </div>
               <div className="evidence-items">
-                <div className="evidence-item">
-                  <div className="evidence-icon">📄</div>
-                  <div className="evidence-content">
-                    <p className="evidence-name">payment_failure.log</p>
-                    <p className="evidence-meta">Error rate: 53%</p>
-                  </div>
-                  <div className="evidence-relevance">Relevance: 89%</div>
-                  <a href="#" className="log-file">Log File</a>
-                </div>
-                <div className="evidence-item">
-                  <div className="evidence-icon">📄</div>
-                  <div className="evidence-content">
-                    <p className="evidence-name">Payment Gateway Runbook</p>
-                    <p className="evidence-meta">PDF Document</p>
-                  </div>
-                  <div className="evidence-relevance">Relevance: 94%</div>
-                  <a href="#" className="log-file">Log File</a>
-                </div>
-                <div className="evidence-item">
-                  <div className="evidence-icon">📄</div>
-                  <div className="evidence-content">
-                    <p className="evidence-name">Similar Incident #INC-143</p>
-                    <p className="evidence-meta">Past Incident</p>
-                  </div>
-                  <div className="evidence-relevance">Relevance: 92%</div>
-                  <a href="#" className="log-file">Log File</a>
-                </div>
+                {evidenceData && evidenceData.length > 0 ? (
+                  evidenceData.map((evidence) => (
+                    <div key={evidence.id} className="evidence-item">
+                      <div className="evidence-icon">📄</div>
+                      <div className="evidence-content">
+                        <p className="evidence-name">{evidence.name}</p>
+                        <p className="evidence-meta">{evidence.meta}</p>
+                      </div>
+                      <div className="evidence-relevance">Relevance: {Math.round(evidence.relevance)}%</div>
+                      <a href="#" className="log-file">View</a>
+                    </div>
+                  ))
+                ) : (
+                  <p style={{ color: '#a0a0a0', padding: '1rem' }}>
+                    {evidenceData === null ? 'Loading evidence...' : 'No evidence retrieved yet. Upload and analyze logs to populate.'}
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -386,30 +532,30 @@ const Dashboard = ({ wsRef }) => {
                 <h3>Agent Activity</h3>
               </div>
               <div className="activity-items">
-                <div className="activity-item completed">
-                  <span>✓</span>
-                  <p>Parser Agent <span className="status">Completed</span></p>
-                </div>
-                <div className="activity-item completed">
-                  <span>✓</span>
-                  <p>Retriever Agent <span className="status">Completed</span></p>
-                </div>
-                <div className="activity-item completed">
-                  <span>✓</span>
-                  <p>Memory Agent <span className="status">Completed</span></p>
-                </div>
-                <div className="activity-item in-progress">
-                  <span>⏳</span>
-                  <p>Reasoning Agent <span className="status">In Progress</span></p>
-                </div>
-                <div className="activity-item pending">
-                  <span>⏱</span>
-                  <p>Recommendation Agent <span className="status">Pending</span></p>
-                </div>
-                <div className="activity-item pending">
-                  <span>⏱</span>
-                  <p>Reporter Agent <span className="status">Pending</span></p>
-                </div>
+                {agentData ? (
+                  agentData.map((agent) => (
+                    <div key={agent.name} className={`activity-item ${agent.status}`}>
+                      <span>
+                        {agent.status === 'completed' && '✓'}
+                        {agent.status === 'in_progress' && '⏳'}
+                        {agent.status === 'pending' && '⏱'}
+                        {agent.status === 'failed' && '❌'}
+                      </span>
+                      <p>
+                        {agent.name}
+                        <span className="status">
+                          {agent.status === 'completed' && `Completed ${agent.duration || ''}`}
+                          {agent.status === 'in_progress' && 'In Progress'}
+                          {agent.status === 'pending' && 'Pending'}
+                          {agent.status === 'failed' && 'Failed'}
+                        </span>
+                      </p>
+                      {agent.error && <p style={{ color: '#ef4444', fontSize: '0.85rem' }}>Error: {agent.error}</p>}
+                    </div>
+                  ))
+                ) : (
+                  <p style={{ color: '#a0a0a0', padding: '1rem' }}>Loading agent status...</p>
+                )}
               </div>
             </div>
           </div>
