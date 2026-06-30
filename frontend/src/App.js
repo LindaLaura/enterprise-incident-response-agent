@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import Header from './components/Header';
-import Sidebar from './components/Sidebar';
+import Sidebar from './components/Sidebar.jsx';
 import Dashboard from './pages/Dashboard';
 import AnalyzeIncident from './pages/AnalyzeIncident';
 
@@ -21,18 +21,23 @@ function App() {
     const port = window.location.port === '3000' ? '8000' : window.location.port || '8000';
     const wsUrl = `${protocol}//${host}:${port}/ws/chat`;
 
+    console.log('🔌 Attempting WebSocket connection to:', wsUrl);
+
     try {
       wsRef.current = new WebSocket(wsUrl);
 
       wsRef.current.onopen = () => {
+        console.log('✅ WebSocket connected');
         setConnected(true);
       };
 
-      wsRef.current.onerror = () => {
+      wsRef.current.onerror = (error) => {
+        console.error('❌ WebSocket error:', error);
         setConnected(false);
       };
 
       wsRef.current.onclose = () => {
+        console.log('⚠️  WebSocket closed, reconnecting in 3s...');
         setConnected(false);
         setTimeout(connectWebSocket, 3000);
       };
@@ -46,7 +51,7 @@ function App() {
   const renderPage = () => {
     switch (activePage) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard wsRef={wsRef} />;
       case 'analyze':
         return <AnalyzeIncident wsRef={wsRef} />;
       case 'knowledge':

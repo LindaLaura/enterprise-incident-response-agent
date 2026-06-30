@@ -1,5 +1,5 @@
 import React from 'react';
-import { Zap, Circle } from 'lucide-react';
+import { Bot, Circle } from 'lucide-react';
 import '../styles/Header.css';
 
 const Header = ({ connected }) => {
@@ -8,7 +8,7 @@ const Header = ({ connected }) => {
       <div className="header-content">
         <div className="header-logo">
           <div className="logo-icon">
-            <Zap size={32} strokeWidth={2.5} />
+            <Bot size={32} strokeWidth={2.5} />
           </div>
           <div className="logo-text">
             <h1>Enterprise Incident Response</h1>

@@ -79,6 +79,48 @@ const Sidebar = ({ activePage, onPageChange }) => {
         ))}
       </nav>
 
+      <div className="sidebar-recent">
+        {!collapsed && (
+          <>
+            <div className="section-label">Recent Incidents</div>
+            <div className="recent-incidents">
+              <div className="incident-item critical">
+                <div className="incident-indicator"></div>
+                <div className="incident-content">
+                  <p className="incident-name">Payment Failure</p>
+                  <p className="incident-meta">Critical</p>
+                </div>
+                <p className="incident-time">2m ago</p>
+              </div>
+              <div className="incident-item high">
+                <div className="incident-indicator"></div>
+                <div className="incident-content">
+                  <p className="incident-name">Checkout API 500</p>
+                  <p className="incident-meta">High</p>
+                </div>
+                <p className="incident-time">1h ago</p>
+              </div>
+              <div className="incident-item medium">
+                <div className="incident-indicator"></div>
+                <div className="incident-content">
+                  <p className="incident-name">User Login Issue</p>
+                  <p className="incident-meta">Medium</p>
+                </div>
+                <p className="incident-time">3h ago</p>
+              </div>
+              <div className="incident-item low">
+                <div className="incident-indicator"></div>
+                <div className="incident-content">
+                  <p className="incident-name">Email Service Down</p>
+                  <p className="incident-meta">Low</p>
+                </div>
+                <p className="incident-time">1d ago</p>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
       <div className="sidebar-footer">
         {!collapsed && (
           <div className="version">v1.0.0</div>

@@ -1,4 +1,5 @@
 import React from 'react';
+import { Bot } from 'lucide-react';
 import './Header.css';
 
 function Header({ connected, stats }) {
@@ -6,7 +7,7 @@ function Header({ connected, stats }) {
     <header className="header">
       <div className="header-content">
         <div className="header-title">
-          <h1>🚨 Incident Response Agent</h1>
+          <h1><Bot size={28} strokeWidth={2.5} style={{display: 'inline-block', marginRight: '0.5rem', verticalAlign: 'middle'}} /> Incident Response Agent</h1>
           <p>AI-Powered Incident Analysis with RAG & Memory</p>
         </div>
 

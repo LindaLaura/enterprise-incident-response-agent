@@ -148,6 +148,134 @@
   text-overflow: ellipsis;
 }
 
+.sidebar-recent {
+  padding: 1.5rem;
+  border-top: 1px solid rgba(148, 113, 255, 0.1);
+  border-bottom: 1px solid rgba(148, 113, 255, 0.1);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.sidebar-recent .section-label {
+  margin-bottom: 0.75rem;
+}
+
+.recent-incidents {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.incident-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: rgba(148, 113, 255, 0.05);
+  border-radius: 6px;
+  border-left: 3px solid rgba(148, 113, 255, 0.3);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.incident-item:hover {
+  background: rgba(148, 113, 255, 0.1);
+  transform: translateX(4px);
+}
+
+.incident-item.critical {
+  background: rgba(239, 68, 68, 0.08);
+  border-left-color: rgba(239, 68, 68, 0.5);
+}
+
+.incident-item.critical:hover {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.incident-item.high {
+  background: rgba(245, 158, 11, 0.08);
+  border-left-color: rgba(245, 158, 11, 0.5);
+}
+
+.incident-item.high:hover {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.incident-item.medium {
+  background: rgba(245, 158, 11, 0.05);
+  border-left-color: rgba(245, 158, 11, 0.3);
+}
+
+.incident-item.medium:hover {
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.incident-item.low {
+  background: rgba(16, 185, 129, 0.05);
+  border-left-color: rgba(16, 185, 129, 0.3);
+}
+
+.incident-item.low:hover {
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.incident-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.incident-item.critical .incident-indicator {
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.5);
+}
+
+.incident-item.high .incident-indicator {
+  background: #f59e0b;
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.5);
+}
+
+.incident-item.medium .incident-indicator {
+  background: #f59e0b;
+}
+
+.incident-item.low .incident-indicator {
+  background: #10b981;
+}
+
+.incident-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.incident-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #e0e0e0;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.incident-meta {
+  font-size: 0.7rem;
+  color: #a0a0a0;
+  margin: 0.1rem 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.incident-time {
+  font-size: 0.7rem;
+  color: #6a7b94;
+  margin: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .sidebar-footer {
   padding: 1.5rem;
   border-top: 1px solid rgba(148, 113, 255, 0.1);

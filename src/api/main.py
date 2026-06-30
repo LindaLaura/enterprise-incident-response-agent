@@ -10,7 +10,6 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 import json
 import asyncio
-from pathlib import Path
 from typing import List, Dict, Any
 import logging
 
@@ -219,6 +218,48 @@ async def get_incidents(limit: int = 10):
     return {
         "total": memory_manager.long_term['metadata']['total_incidents'],
         "incidents": incidents
+    }
+
+
+@app.get("/api/incidents/trend")
+async def get_incident_trend(days: int = 7):
+    """Get incident trend data for the last N days."""
+    # Mock data - in production, query from database
+    dates = ["Jun 21", "Jun 22", "Jun 23", "Jun 24", "Jun 25", "Jun 26", "Jun 27"]
+    counts = [15, 18, 12, 22, 16, 14, 10]
+
+    return {
+        "dates": dates[-days:],
+        "counts": counts[-days:]
+    }
+
+
+@app.get("/api/incidents/severity")
+async def get_incidents_by_severity():
+    """Get incidents breakdown by severity."""
+    return {
+        "critical": 15,
+        "high": 25,
+        "medium": 30,
+        "low": 10,
+        "total": 80
+    }
+
+
+@app.get("/api/incidents/latest")
+async def get_latest_incident():
+    """Get latest incident analysis."""
+    return {
+        "confidence": 92,
+        "severity": "Critical",
+        "status": "Investigating",
+        "affected_users": "~5,000 users",
+        "duration": "15 minutes",
+        "primary_cause": "Database connection pool exhaustion due to increased query load",
+        "business_impact": "Order processing service is unavailable. Estimated revenue loss: $50K/minute",
+        "technical_impact": "Connection pool at 100% capacity, new requests timing out after 30 seconds",
+        "affected_services": ["api-gateway", "order-service", "payment-service"],
+        "immediate_action": "1. Increase connection pool size to 300. 2. Kill long-running queries. 3. Scale database replicas."
     }
 
 

@@ -50,28 +50,12 @@ class ChromaDBManager:
 
         self.openai_client = OpenAI(**client_kwargs)
 
-        # Try to use OpenAI embeddings, fallback to local if not available
-        self.use_openai_embeddings = self._test_openai_embeddings()
-
-        if self.use_openai_embeddings:
-            # Get or create collection without embedding function
-            # We'll handle embeddings manually
-            self.collection = self.client.get_or_create_collection(
-                name=collection_name,
-                metadata={"hnsw:space": "cosine"}
-            )
-        else:
-            # Use local embeddings as fallback
-            print("  ℹ️  Using local embeddings (OpenAI embeddings not available)")
-            from chromadb.utils import embedding_functions
-            embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
-                model_name="all-MiniLM-L6-v2"
-            )
-            self.collection = self.client.get_or_create_collection(
-                name=collection_name,
-                embedding_function=embedding_function,
-                metadata={"description": "Incident response documentation"}
-            )
+        # Always use OpenAI embeddings (skip sentence_transformers to avoid torch conflicts)
+        self.use_openai_embeddings = True
+        self.collection = self.client.get_or_create_collection(
+            name=collection_name,
+            metadata={"hnsw:space": "cosine"}
+        )
 
     def _test_openai_embeddings(self) -> bool:
         """Test if OpenAI embeddings are available."""
