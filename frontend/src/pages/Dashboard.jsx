@@ -1,22 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, BookOpen, Brain, Bot, Clock, AlertTriangle, Upload, CheckCircle, MessageSquare, Send } from 'lucide-react';
+import { Activity, BookOpen, Brain, Bot, Clock, AlertTriangle, Upload, CheckCircle } from 'lucide-react';
 import ReportPreviewModal from '../components/ReportPreviewModal';
 import '../styles/Dashboard.css';
 
 const Dashboard = ({ wsRef }) => {
   const [stats, setStats] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
-  const [messages, setMessages] = useState([
-    { role: 'assistant', content: '' }
-  ]);
-  const [inputMessage, setInputMessage] = useState('');
-  const [loading, setLoading] = useState(false);
   const [trendData, setTrendData] = useState(null);
   const [severityData, setSeverityData] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [latestIncident, setLatestIncident] = useState(null);
   const [progressData, setProgressData] = useState(null);
-  const [agentData, setAgentData] = useState(null);
+  // const [agentData, setAgentData] = useState(null);
   const [incidentStats, setIncidentStats] = useState(null);
   const [evidenceData, setEvidenceData] = useState(null);
   const [reportModal, setReportModal] = useState(null);
@@ -25,18 +20,18 @@ const Dashboard = ({ wsRef }) => {
     fetchStats();
     fetchChartData();
     fetchProgressData();
-    fetchAgentData();
+    // fetchAgentData();
     fetchIncidentStats();
     fetchEvidenceData();
     const interval = setInterval(fetchStats, 5000);
     const progressInterval = setInterval(fetchProgressData, 3000);
-    const agentInterval = setInterval(fetchAgentData, 3000);
+    // const agentInterval = setInterval(fetchAgentData, 3000);
     const statsInterval = setInterval(fetchIncidentStats, 5000);
     const evidenceInterval = setInterval(fetchEvidenceData, 5000);
     return () => {
       clearInterval(interval);
       clearInterval(progressInterval);
-      clearInterval(agentInterval);
+      // clearInterval(agentInterval);
       clearInterval(statsInterval);
       clearInterval(evidenceInterval);
     };
@@ -70,15 +65,15 @@ const Dashboard = ({ wsRef }) => {
     }
   };
 
-  const fetchAgentData = async () => {
-    try {
-      const response = await fetch('/api/agents/status');
-      const data = await response.json();
-      setAgentData(data.agents);
-    } catch (error) {
-      console.error('Failed to fetch agent data:', error);
-    }
-  };
+  // const fetchAgentData = async () => {
+  //   try {
+  //     const response = await fetch('/api/agents/status');
+  //     const data = await response.json();
+  //     setAgentData(data.agents);
+  //   } catch (error) {
+  //     console.error('Failed to fetch agent data:', error);
+  //   }
+  // };
 
   const fetchIncidentStats = async () => {
     try {
@@ -138,30 +133,6 @@ const Dashboard = ({ wsRef }) => {
     }
   };
 
-  useEffect(() => {
-    if (!wsRef || !wsRef.current) return;
-
-    const handleMessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        console.log('💬 WebSocket:', data.type, data.content?.substring(0, 50));
-
-        if (data.type === 'message') {
-          setMessages(prev => [...prev, { role: 'assistant', content: data.content }]);
-          setLoading(false);
-        } else if (data.type === 'error') {
-          setMessages(prev => [...prev, { role: 'assistant', content: `⚠️ ${data.content}` }]);
-          setLoading(false);
-        }
-        // Ignore: loading, history, stats
-      } catch (e) {
-        console.error('WebSocket parse error:', e);
-      }
-    };
-
-    wsRef.current.addEventListener('message', handleMessage);
-    return () => wsRef.current?.removeEventListener('message', handleMessage);
-  }, [wsRef]);
 
   const fetchStats = async () => {
     try {
@@ -177,13 +148,11 @@ const Dashboard = ({ wsRef }) => {
     setUploadedFile(file);
   };
 
-  const handleSendMessage = () => {
-    // Chat disabled - do nothing
-    return;
-  };
 
   const handleGenerateReport = async (format) => {
     const incident = latestIncident;
+    console.log('📋 Generate report clicked:', { format, incident, hasIncident: !!incident, hasId: !!incident?.incident_id });
+
     if (!incident || !incident.incident_id) {
       alert('No incident analyzed yet. Upload and analyze logs first.');
       return;
@@ -539,37 +508,11 @@ const Dashboard = ({ wsRef }) => {
                     Analysis results are shown in the cards above. Full conversational AI coming soon.
                   </div>
                 </div>
-                {messages.map((msg, idx) => (
-                  <div key={idx} className={`message ${msg.role}`}>
-                    <div className="message-bubble">{msg.content}</div>
-                  </div>
-                ))}
-                {loading && (
-                  <div className="message assistant">
-                    <div className="message-bubble typing">
-                      <span></span><span></span><span></span>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="chat-input">
-                <input
-                  type="text"
-                  placeholder="Chat coming soon... View analysis results in cards above ↑"
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                  disabled
-                  style={{ opacity: 0.5, cursor: 'not-allowed' }}
-                />
-                <button onClick={handleSendMessage} className="send-btn" disabled style={{ opacity: 0.5, cursor: 'not-allowed' }}>
-                  <Send size={18} />
-                </button>
               </div>
             </div>
 
-            {/* Agent Activity */}
-            <div className="card activity-card">
+            {/* Agent Activity - Commented out: Redundant with AI Investigation Progress */}
+            {/* <div className="card activity-card">
               <div className="card-header">
                 <h3>Agent Activity</h3>
               </div>
@@ -599,7 +542,7 @@ const Dashboard = ({ wsRef }) => {
                   <p style={{ color: '#a0a0a0', padding: '1rem' }}>Loading agent status...</p>
                 )}
               </div>
-            </div>
+            </div> */}
           </div>
         </div>
 

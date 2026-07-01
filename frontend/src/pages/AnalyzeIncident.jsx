@@ -5,6 +5,7 @@ import DocumentUploadZone from '../components/DocumentUploadZone';
 import EvidencePanel from '../components/EvidencePanel';
 import MemoryPanel from '../components/MemoryPanel';
 import RootCausePanel from '../components/RootCausePanel';
+import ReportPreviewModal from '../components/ReportPreviewModal';
 import '../styles/AnalyzeIncident.css';
 
 const AnalyzeIncident = ({ wsRef }) => {
@@ -12,6 +13,7 @@ const AnalyzeIncident = ({ wsRef }) => {
   const [analyzing, setAnalyzing] = useState(false);
   const [pipelineSteps, setPipelineSteps] = useState([]);
   const [analysis, setAnalysis] = useState(null);
+  const [reportModal, setReportModal] = useState(null);
   const fileInputRef = useRef(null);
 
   const pipelineConfig = [
@@ -105,28 +107,60 @@ const AnalyzeIncident = ({ wsRef }) => {
     setLogs(demoLogs);
   };
 
-  const handleGenerateReport = async (format) => {
+  const handleGenerateReport = (format) => {
     if (!analysis || !analysis.full_analysis?.incident_id) {
       alert('No analysis available to export');
       return;
     }
 
+    const incident = {
+      incident_id: analysis.full_analysis.incident_id,
+      timestamp: new Date().toISOString(),
+      summary: analysis.full_analysis.summary || 'Incident Summary',
+      severity: analysis.full_analysis.severity || 'Unknown',
+      status: 'Analyzed',
+      root_cause: analysis.full_analysis.root_cause || 'Unknown',
+      primary_cause: analysis.full_analysis.root_cause || 'Unknown',
+      business_impact: analysis.full_analysis.business_impact || 'N/A',
+      technical_impact: analysis.full_analysis.technical_impact || 'N/A',
+      affected_services: analysis.full_analysis.affected_services || [],
+      affected_users: analysis.full_analysis.affected_users || 'N/A',
+      duration: analysis.full_analysis.duration || 'N/A',
+      immediate_action: analysis.full_analysis.immediate_action || 'No immediate actions',
+      recommendations: analysis.full_analysis.recommendations || [],
+      confidence: analysis.full_analysis.confidence || 85
+    };
+
+    setReportModal({
+      format,
+      incident
+    });
+  };
+
+  const handleDownloadReport = async () => {
+    const { format, incident } = reportModal;
+
     try {
-      // Generate report
       const genResponse = await fetch('/api/report/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          incident_id: analysis.full_analysis.incident_id,
+          incident_id: incident.incident_id,
           format: format
         })
       });
 
-      if (!genResponse.ok) throw new Error('Failed to generate report');
+      if (!genResponse.ok) {
+        const error = await genResponse.json();
+        throw new Error(error.detail || 'Failed to generate report');
+      }
 
       const genData = await genResponse.json();
 
-      // Download report
+      if (!genData.report_id) {
+        throw new Error('No report ID returned');
+      }
+
       const dlResponse = await fetch(`/api/report/download/${genData.report_id}`);
       if (!dlResponse.ok) throw new Error('Failed to download report');
 
@@ -134,16 +168,16 @@ const AnalyzeIncident = ({ wsRef }) => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = genData.filename || `report.${format}`;
+      link.download = genData.filename || `incident_${incident.incident_id}_report.${format}`;
       document.body.appendChild(link);
       link.click();
-      window.URL.revokeObjectURL(url);
       document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
 
-      console.log(`✅ Downloaded ${format.toUpperCase()} report`);
+      console.log(`✅ Downloaded ${format.toUpperCase()}`);
     } catch (error) {
-      console.error(`Failed to generate/download ${format} report:`, error);
-      alert(`Failed to download ${format.toUpperCase()} report: ${error.message}`);
+      console.error(`Report error:`, error);
+      alert(`Failed: ${error.message}`);
     }
   };
 
@@ -266,6 +300,16 @@ const AnalyzeIncident = ({ wsRef }) => {
           </div>
         ) : null}
       </div>
+
+      {/* Report Preview Modal */}
+      {reportModal && (
+        <ReportPreviewModal
+          incident={reportModal.incident}
+          format={reportModal.format}
+          onClose={() => setReportModal(null)}
+          onDownload={handleDownloadReport}
+        />
+      )}
     </div>
   );
 };

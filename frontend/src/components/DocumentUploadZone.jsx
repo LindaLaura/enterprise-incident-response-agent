@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Upload } from 'lucide-react';
 import '../styles/DocumentUploadZone.css';
 
 const DocumentUploadZone = ({ onFileSelect }) => {
   const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -26,14 +27,20 @@ const DocumentUploadZone = ({ onFileSelect }) => {
     }
   };
 
+  const handleClick = () => {
+    fileInputRef.current?.click();
+  };
+
   return (
-    <div
-      className={`upload-zone ${isDragging ? 'dragging' : ''}`}
-      onDragEnter={handleDrag}
-      onDragLeave={handleDrag}
-      onDragOver={handleDrag}
-      onDrop={handleDrop}
-    >
+    <>
+      <div
+        className={`upload-zone ${isDragging ? 'dragging' : ''}`}
+        onDragEnter={handleDrag}
+        onDragLeave={handleDrag}
+        onDragOver={handleDrag}
+        onDrop={handleDrop}
+        onClick={handleClick}
+      >
       <div className="upload-content">
         <div className="upload-icon">
           <Upload size={48} strokeWidth={1.5} />
@@ -43,6 +50,14 @@ const DocumentUploadZone = ({ onFileSelect }) => {
         <p className="upload-hint">or click to select</p>
       </div>
     </div>
+    <input
+      ref={fileInputRef}
+      type="file"
+      onChange={onFileSelect}
+      accept=".log,.txt,.json,.csv,.pdf"
+      style={{ display: 'none' }}
+    />
+    </>
   );
 };
 

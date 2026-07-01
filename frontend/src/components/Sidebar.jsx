@@ -132,7 +132,7 @@ const Sidebar = ({ activePage, onPageChange }) => {
               {recentIncidents.length > 0 ? (
                 recentIncidents.map((incident) => (
                   <div
-                    key={incident.incident_id}
+                    key={incident.incident_id || `incident-${incident.timestamp}`}
                     className={`incident-item ${getSeverityClass(incident.severity)}`}
                   >
                     <div className="incident-indicator"></div>

@@ -477,6 +477,8 @@ async def get_latest_incident():
 
     # Extract and format the incident data
     return {
+        "incident_id": latest.get('incident_id', f"INC-{len(incidents):04d}"),
+        "timestamp": latest.get('timestamp', datetime.now().isoformat()),
         "confidence": 85,  # Default confidence for stored incidents
         "severity": latest.get('severity', 'Unknown'),
         "status": "Analyzed",
@@ -490,7 +492,10 @@ async def get_latest_incident():
             latest.get('recommendations', ['No recommendations available'])[0]
             if latest.get('recommendations')
             else "No recommendations available"
-        )
+        ),
+        "summary": latest.get('summary', 'Incident Summary'),
+        "root_cause": latest.get('root_cause', 'Unknown'),
+        "recommendations": latest.get('recommendations', [])
     }
 
 
@@ -663,10 +668,24 @@ async def generate_report(request: dict):
         if not file_path:
             raise ValueError("Could not save report file")
 
+        # Generate report_id from incident_id and format
+        report_id = f"{incident_id}_{format}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+        # Store report metadata in memory
+        memory_manager.save_report({
+            "report_id": report_id,
+            "incident_id": incident_id,
+            "format": format,
+            "file_path": file_path,
+            "filename": report_data.get("filename"),
+            "timestamp": datetime.now().isoformat()
+        })
+
         return {
             "status": "success",
             "incident_id": incident_id,
             "format": format,
+            "report_id": report_id,
             "file_path": file_path,
             "filename": report_data.get("filename")
         }
