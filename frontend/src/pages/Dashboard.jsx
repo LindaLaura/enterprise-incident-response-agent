@@ -107,26 +107,54 @@ const Dashboard = ({ wsRef }) => {
       const response = await fetch('/api/agents/context');
       const context = await response.json();
 
-      // Extract retrieved documents from agent context
-      const retrievedDocs = context.retrieved_docs || {};
+      // Extract evidence from various sources
+      const evidence = [];
 
-      if (retrievedDocs.top_results) {
-        // Parse retrieved documents and create evidence items
-        const docLines = retrievedDocs.top_results.split('\n').filter(line => line.trim());
-
-        const evidence = docLines.slice(0, 3).map((doc, idx) => ({
-          id: idx,
-          name: doc.substring(0, 50) || `Document ${idx + 1}`,
-          relevance: 85 + Math.random() * 10,
-          meta: `Retrieved document ${idx + 1}`,
-          type: 'document'
-        }));
-
-        setEvidenceData(evidence);
-      } else {
-        // Fallback if no retrieved docs
-        setEvidenceData([]);
+      // Try retrieved docs
+      if (context.retrieved_docs) {
+        const retrievedDocs = context.retrieved_docs;
+        if (typeof retrievedDocs === 'string') {
+          const docLines = retrievedDocs.split('\n').filter(line => line.trim());
+          docLines.slice(0, 3).forEach((doc, idx) => {
+            evidence.push({
+              id: `doc_${idx}`,
+              name: doc.substring(0, 60) || `Document ${idx + 1}`,
+              relevance: 85 + Math.random() * 10,
+              meta: 'Retrieved from knowledge base',
+              type: 'document'
+            });
+          });
+        } else if (Array.isArray(retrievedDocs)) {
+          retrievedDocs.slice(0, 3).forEach((doc, idx) => {
+            evidence.push({
+              id: `doc_${idx}`,
+              name: typeof doc === 'string' ? doc.substring(0, 60) : doc.title || `Document ${idx + 1}`,
+              relevance: 85 + Math.random() * 10,
+              meta: 'Retrieved from knowledge base',
+              type: 'document'
+            });
+          });
+        }
       }
+
+      // Try parsed info as evidence
+      if (context.parsed_info && evidence.length === 0) {
+        const parsedInfo = context.parsed_info;
+        if (typeof parsedInfo === 'string') {
+          const lines = parsedInfo.split('\n').filter(line => line.trim());
+          lines.slice(0, 3).forEach((line, idx) => {
+            evidence.push({
+              id: `parsed_${idx}`,
+              name: line.substring(0, 60) || `Log Entry ${idx + 1}`,
+              relevance: 90,
+              meta: 'Extracted from logs',
+              type: 'log'
+            });
+          });
+        }
+      }
+
+      setEvidenceData(evidence.length > 0 ? evidence : []);
     } catch (error) {
       console.error('Failed to fetch evidence data:', error);
       setEvidenceData([]);
@@ -220,7 +248,7 @@ const Dashboard = ({ wsRef }) => {
 
     // Reset states for new analysis
     setProgressData(null);
-    setAgentData(null);
+    // setAgentData(null);
     setLatestIncident(null);
     setEvidenceData(null);
 
@@ -247,7 +275,7 @@ const Dashboard = ({ wsRef }) => {
           content: `Analyze these logs: ${uploadedFile.name}`,
           timestamp: new Date().toISOString()
         }));
-        setLoading(true);
+        // setLoading(true);
 
         // Poll for latest incident after analysis completes (longer timeout for agent pipeline)
         setTimeout(() => {

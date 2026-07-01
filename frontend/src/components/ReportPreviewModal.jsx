@@ -59,6 +59,32 @@ const ReportPreviewModal = ({ incident, format, onClose, onDownload }) => {
             </div>
           </div>
 
+          {/* Affected Services & Users */}
+          <div className="stats-grid">
+            {incident.affected_services && incident.affected_services.length > 0 && (
+              <div className="stat-box">
+                <span className="stat-label">Affected Services</span>
+                <span className="stat-value">
+                  {incident.affected_services.map(service =>
+                    typeof service === 'object' ? (service.name || service.id || 'Unknown') : service
+                  ).join(', ')}
+                </span>
+              </div>
+            )}
+            {incident.affected_users && incident.affected_users !== 'N/A' && (
+              <div className="stat-box">
+                <span className="stat-label">Affected Users</span>
+                <span className="stat-value">{incident.affected_users}</span>
+              </div>
+            )}
+            {incident.duration && incident.duration !== 'N/A' && (
+              <div className="stat-box">
+                <span className="stat-label">Duration</span>
+                <span className="stat-value">{incident.duration}</span>
+              </div>
+            )}
+          </div>
+
           {/* Summary */}
           <div className="section">
             <h3>📌 Summary</h3>
@@ -71,14 +97,14 @@ const ReportPreviewModal = ({ incident, format, onClose, onDownload }) => {
             <p>{incident.root_cause || 'Not determined'}</p>
           </div>
 
-          {/* Affected Services */}
+          {/* Affected Services - Detailed */}
           {incident.affected_services && incident.affected_services.length > 0 && (
             <div className="section">
               <h3>🔌 Affected Services</h3>
               <div className="services-list">
                 {incident.affected_services.map((service, idx) => (
-                  <span key={idx} className="service-tag">
-                    {service}
+                  <span key={`service_${idx}`} className="service-tag">
+                    {typeof service === 'object' ? (service.name || service.id || 'Unknown') : service}
                   </span>
                 ))}
               </div>
