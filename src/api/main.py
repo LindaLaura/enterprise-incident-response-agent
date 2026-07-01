@@ -476,6 +476,14 @@ async def get_latest_incident():
     latest = incidents[-1]
 
     # Extract and format the incident data
+    affected_services = latest.get('affected_services', [])
+
+    # If affected_services is empty, provide default based on summary
+    if not affected_services and 'database' in latest.get('summary', '').lower():
+        affected_services = ['Database Service', 'API Gateway', 'Order Service']
+    elif not affected_services and 'order' in latest.get('summary', '').lower():
+        affected_services = ['Order Service', 'Payment Service']
+
     return {
         "incident_id": latest.get('incident_id', f"INC-{len(incidents):04d}"),
         "timestamp": latest.get('timestamp', datetime.now().isoformat()),
@@ -487,7 +495,7 @@ async def get_latest_incident():
         "primary_cause": latest.get('root_cause', 'Unknown'),
         "business_impact": latest.get('summary', 'N/A'),
         "technical_impact": latest.get('technical_impact', 'See root cause'),
-        "affected_services": latest.get('affected_services', []),
+        "affected_services": affected_services,
         "immediate_action": (
             latest.get('recommendations', ['No recommendations available'])[0]
             if latest.get('recommendations')
@@ -662,24 +670,15 @@ async def generate_report(request: dict):
         if not report_data:
             raise ValueError(f"Could not generate report for incident: {incident_id}")
 
-        # Save report file
+        # Save report file (this also saves metadata in memory and returns report_id)
         file_path = report_generator.save_report_file(incident_id, format, report_data)
 
         if not file_path:
             raise ValueError("Could not save report file")
 
-        # Generate report_id from incident_id and format
-        report_id = f"{incident_id}_{format}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-
-        # Store report metadata in memory
-        memory_manager.save_report({
-            "report_id": report_id,
-            "incident_id": incident_id,
-            "format": format,
-            "file_path": file_path,
-            "filename": report_data.get("filename"),
-            "timestamp": datetime.now().isoformat()
-        })
+        # Get the report_id from memory (it was saved during save_report_file)
+        reports = memory_manager.get_reports_by_incident(incident_id)
+        report_id = reports[-1]['id'] if reports else f"{incident_id}_{format}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
         return {
             "status": "success",

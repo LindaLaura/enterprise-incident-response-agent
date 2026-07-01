@@ -114,21 +114,21 @@ const AnalyzeIncident = ({ wsRef }) => {
     }
 
     const incident = {
-      incident_id: analysis.full_analysis.incident_id,
+      incident_id: analysis.full_analysis?.incident_id || `INC-${Date.now()}`,
       timestamp: new Date().toISOString(),
-      summary: analysis.full_analysis.summary || 'Incident Summary',
-      severity: analysis.full_analysis.severity || 'Unknown',
+      summary: analysis.full_analysis?.summary || analysis.summary || 'Incident Summary',
+      severity: analysis.severity || 'Unknown',
       status: 'Analyzed',
-      root_cause: analysis.full_analysis.root_cause || 'Unknown',
-      primary_cause: analysis.full_analysis.root_cause || 'Unknown',
-      business_impact: analysis.full_analysis.business_impact || 'N/A',
-      technical_impact: analysis.full_analysis.technical_impact || 'N/A',
-      affected_services: analysis.full_analysis.affected_services || [],
-      affected_users: analysis.full_analysis.affected_users || 'N/A',
-      duration: analysis.full_analysis.duration || 'N/A',
-      immediate_action: analysis.full_analysis.immediate_action || 'No immediate actions',
-      recommendations: analysis.full_analysis.recommendations || [],
-      confidence: analysis.full_analysis.confidence || 85
+      root_cause: analysis.full_analysis?.root_cause || analysis.primary_cause || 'Unknown',
+      primary_cause: analysis.primary_cause || 'Unknown',
+      business_impact: analysis.business_impact || 'N/A',
+      technical_impact: analysis.technical_impact || 'N/A',
+      affected_services: analysis.affected_services || analysis.full_analysis?.affected_services || [],
+      affected_users: analysis.affected_users || 'N/A',
+      duration: analysis.duration || 'N/A',
+      immediate_action: analysis.immediate_action || 'No immediate actions',
+      recommendations: analysis.full_analysis?.recommendations || [],
+      confidence: analysis.confidence || 85
     };
 
     setReportModal({
