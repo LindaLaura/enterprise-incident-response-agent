@@ -37,15 +37,18 @@ class ChromaDBManager:
             )
         )
 
-        # Initialize OpenAI client for embeddings (use separate endpoint from .env)
+        # Initialize OpenAI client
         api_key = os.getenv("OPENAI_API_KEY")
-        embeddings_base_url = os.getenv("OPENAI_EMBEDDINGS_BASE_URL", "https://api.openai.com/v1")
+        base_url = os.getenv("OPENAI_BASE_URL")
 
         if not api_key:
             raise ValueError("OPENAI_API_KEY not found in environment")
 
-        # Create embeddings client with configured base URL
-        self.embeddings_client = OpenAI(api_key=api_key, base_url=embeddings_base_url)
+        client_kwargs = {"api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+
+        self.openai_client = OpenAI(**client_kwargs)
 
         # Always use OpenAI embeddings (skip sentence_transformers to avoid torch conflicts)
         self.use_openai_embeddings = True
@@ -57,7 +60,7 @@ class ChromaDBManager:
     def _test_openai_embeddings(self) -> bool:
         """Test if OpenAI embeddings are available."""
         try:
-            response = self.embeddings_client.embeddings.create(
+            response = self.openai_client.embeddings.create(
                 model="text-embedding-3-small",
                 input="test"
             )
@@ -78,7 +81,7 @@ class ChromaDBManager:
         if not self.use_openai_embeddings:
             return None  # ChromaDB will handle it
 
-        response = self.embeddings_client.embeddings.create(
+        response = self.openai_client.embeddings.create(
             model="text-embedding-3-small",
             input=text
         )
