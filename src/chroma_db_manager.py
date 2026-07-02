@@ -50,8 +50,8 @@ class ChromaDBManager:
 
         self.openai_client = OpenAI(**client_kwargs)
 
-        # Always use OpenAI embeddings (skip sentence_transformers to avoid torch conflicts)
-        self.use_openai_embeddings = True
+        # Use ChromaDB's built-in embeddings instead of OpenAI (proxy doesn't support embedding models)
+        self.use_openai_embeddings = False
         self.collection = self.client.get_or_create_collection(
             name=collection_name,
             metadata={"hnsw:space": "cosine"}
