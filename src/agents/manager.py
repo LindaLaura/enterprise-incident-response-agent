@@ -97,11 +97,22 @@ class AgentManager:
                     })
                 raise
 
-        # Return final report from reporter agent
-        report = self.agents[-1].output
+        # Return final report with full context data
+        final_report = self.agents[-1].output or {}
+
+        # Merge all context data into the report for complete analysis
+        comprehensive_report = {
+            **final_report,
+            'parsed_info': self.context.get('parsed_info'),
+            'retrieved_docs': self.context.get('retrieved_docs'),
+            'memory_info': self.context.get('memory_info'),
+            'root_cause': self.context.get('root_cause'),
+            'recommendations': self.context.get('recommendations')
+        }
+
         logger.info("🎉 Analysis complete!")
 
-        return report
+        return comprehensive_report
 
     def get_agents_status(self) -> List[Dict[str, Any]]:
         """Get status of all agents."""

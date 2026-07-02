@@ -316,7 +316,7 @@ async def analyze_incident(user_input: str) -> str:
             # Get final report
             final_report = result or {}
 
-            # Save incident to memory with evidence
+            # Save incident to memory with ALL generated data
             try:
                 incident_id = final_report.get('incident_id', f'INC-{int(datetime.now().timestamp())}')
 
@@ -329,20 +329,27 @@ async def analyze_incident(user_input: str) -> str:
                     elif isinstance(retrieved, list):
                         retrieved_docs = retrieved[:3]
 
+                # Get root_cause_analysis from context for additional fields
+                root_cause_data = agent_manager.context.get('root_cause', {})
+
+                # Get affected_systems from either final_report or root_cause_analysis
+                affected_services = final_report.get('affected_systems', []) or root_cause_data.get('affected_systems', [])
+
                 memory_manager.save_incident(
                     incident_id=incident_id,
                     summary=final_report.get('summary', 'Analysis completed'),
                     root_cause=final_report.get('root_cause', 'Unknown'),
                     recommendations=final_report.get('recommendations', {}).get('immediate_actions', []),
                     severity=final_report.get('severity', 'MEDIUM'),
-                    affected_services=final_report.get('affected_systems', []),
+                    affected_services=affected_services,
                     retrieved_docs=retrieved_docs,
-                    technical_impact=root_cause_analysis.get('contributing_factors', []),
-                    business_impact=final_report.get('summary', 'N/A'),
-                    confidence=confidence,
+                    technical_impact=root_cause_data.get('contributing_factors', []),
+                    business_impact=final_report.get('business_impact', final_report.get('summary', 'N/A')),
+                    confidence=final_report.get('confidence', confidence),
                     affected_users=final_report.get('affected_users', 'N/A'),
                     duration=final_report.get('duration', 'N/A'),
                     timeline=final_report.get('timeline', []),
+                    events_by_severity=root_cause_data.get('events_by_severity', {}),
                     next_steps=final_report.get('recommendations', {}).get('long_term_improvements', [])
                 )
                 logger.info(f"✅ Saved incident {incident_id} to memory with {len(retrieved_docs)} evidence items")
