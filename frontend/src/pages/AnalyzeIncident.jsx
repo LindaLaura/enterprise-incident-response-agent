@@ -108,26 +108,29 @@ const AnalyzeIncident = ({ wsRef }) => {
   };
 
   const handleGenerateReport = (format) => {
-    if (!analysis || !analysis.full_analysis?.incident_id) {
+    if (!analysis) {
       alert('No analysis available to export');
       return;
     }
 
+    // Generate incident_id if not present
+    const incident_id = `INC-${Date.now()}`;
+
     const incident = {
-      incident_id: analysis.full_analysis?.incident_id || `INC-${Date.now()}`,
+      incident_id: incident_id,
       timestamp: new Date().toISOString(),
-      summary: analysis.full_analysis?.summary || analysis.summary || 'Incident Summary',
+      summary: analysis.summary || analysis.full_analysis || 'Incident Summary',
       severity: analysis.severity || 'Unknown',
       status: 'Analyzed',
-      root_cause: analysis.full_analysis?.root_cause || analysis.primary_cause || 'Unknown',
+      root_cause: analysis.primary_cause || 'Unknown',
       primary_cause: analysis.primary_cause || 'Unknown',
       business_impact: analysis.business_impact || 'N/A',
       technical_impact: analysis.technical_impact || 'N/A',
-      affected_services: analysis.affected_services || analysis.full_analysis?.affected_services || [],
+      affected_services: analysis.affected_services || [],
       affected_users: analysis.affected_users || 'N/A',
       duration: analysis.duration || 'N/A',
       immediate_action: analysis.immediate_action || 'No immediate actions',
-      recommendations: analysis.full_analysis?.recommendations || [],
+      recommendations: analysis.recommendations || [],
       confidence: analysis.confidence || 85
     };
 
@@ -146,7 +149,8 @@ const AnalyzeIncident = ({ wsRef }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           incident_id: incident.incident_id,
-          format: format
+          format: format,
+          incident_data: incident
         })
       });
 

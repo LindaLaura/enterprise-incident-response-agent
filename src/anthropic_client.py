@@ -3,7 +3,14 @@ Anthropic API client wrapper.
 """
 
 import os
+import logging
 from anthropic import Anthropic
+from .langsmith_config import trace_function, LANGSMITH_ENABLED
+
+logger = logging.getLogger(__name__)
+
+if LANGSMITH_ENABLED:
+    logger.info("✅ LangSmith tracing enabled for Anthropic Client")
 
 
 class AnthropicClient:
@@ -19,6 +26,7 @@ class AnthropicClient:
         # TODO: Initialize Anthropic client
         # self.client = Anthropic(api_key=self.api_key)
 
+    @trace_function(name="anthropic_generate", tags=["llm", "anthropic"])
     def generate(self, prompt: str) -> str:
         """
         Generate a response from Anthropic.

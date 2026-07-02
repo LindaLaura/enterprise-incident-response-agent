@@ -4,8 +4,15 @@ RAG Retriever Module
 Handles semantic search and retrieval of relevant documentation chunks.
 """
 
+import logging
 from typing import List, Dict, Any, Optional
 from .chroma_db_manager import ChromaDBManager
+from .langsmith_config import trace_function, LANGSMITH_ENABLED
+
+logger = logging.getLogger(__name__)
+
+if LANGSMITH_ENABLED:
+    logger.info("✅ LangSmith tracing enabled for RAG Retriever")
 
 
 class RAGRetriever:
@@ -20,6 +27,7 @@ class RAGRetriever:
         """
         self.chroma = chroma_manager or ChromaDBManager()
 
+    @trace_function(name="rag_retrieve", tags=["rag", "retrieval"])
     def retrieve(
         self,
         query: str,

@@ -104,55 +104,12 @@ const Dashboard = ({ wsRef }) => {
 
   const fetchEvidenceData = async () => {
     try {
-      const response = await fetch('/api/agents/context');
-      const context = await response.json();
+      // Get evidence from latest incident (now includes evidence data)
+      const response = await fetch('/api/incidents/latest');
+      const incident = await response.json();
 
-      // Extract evidence from various sources
-      const evidence = [];
-
-      // Try retrieved docs
-      if (context.retrieved_docs) {
-        const retrievedDocs = context.retrieved_docs;
-        if (typeof retrievedDocs === 'string') {
-          const docLines = retrievedDocs.split('\n').filter(line => line.trim());
-          docLines.slice(0, 3).forEach((doc, idx) => {
-            evidence.push({
-              id: `doc_${idx}`,
-              name: doc.substring(0, 60) || `Document ${idx + 1}`,
-              relevance: 85 + Math.random() * 10,
-              meta: 'Retrieved from knowledge base',
-              type: 'document'
-            });
-          });
-        } else if (Array.isArray(retrievedDocs)) {
-          retrievedDocs.slice(0, 3).forEach((doc, idx) => {
-            evidence.push({
-              id: `doc_${idx}`,
-              name: typeof doc === 'string' ? doc.substring(0, 60) : doc.title || `Document ${idx + 1}`,
-              relevance: 85 + Math.random() * 10,
-              meta: 'Retrieved from knowledge base',
-              type: 'document'
-            });
-          });
-        }
-      }
-
-      // Try parsed info as evidence
-      if (context.parsed_info && evidence.length === 0) {
-        const parsedInfo = context.parsed_info;
-        if (typeof parsedInfo === 'string') {
-          const lines = parsedInfo.split('\n').filter(line => line.trim());
-          lines.slice(0, 3).forEach((line, idx) => {
-            evidence.push({
-              id: `parsed_${idx}`,
-              name: line.substring(0, 60) || `Log Entry ${idx + 1}`,
-              relevance: 90,
-              meta: 'Extracted from logs',
-              type: 'log'
-            });
-          });
-        }
-      }
+      // Extract evidence from incident
+      const evidence = incident.evidence || [];
 
       setEvidenceData(evidence.length > 0 ? evidence : []);
     } catch (error) {

@@ -13,8 +13,12 @@ from .agents import (
     RecommendationAgent,
     ReporterAgent
 )
+from ..langsmith_config import trace_function, LANGSMITH_ENABLED
 
 logger = logging.getLogger(__name__)
+
+if LANGSMITH_ENABLED:
+    logger.info("✅ LangSmith tracing enabled for Agent Manager")
 
 
 class AgentManager:
@@ -46,6 +50,7 @@ class AgentManager:
         self.agent_map = {agent.name: agent for agent in self.agents}
         self.context = {}
 
+    @trace_function(name="agent_pipeline", tags=["analysis", "agents"])
     async def run_analysis(self, logs: str, update_callback=None) -> Dict[str, Any]:
         """
         Run complete incident analysis pipeline.

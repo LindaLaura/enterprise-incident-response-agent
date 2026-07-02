@@ -4,8 +4,15 @@ OpenAI API client wrapper.
 
 import os
 import time
+import logging
 from openai import OpenAI
 from openai import APIError, RateLimitError, APIConnectionError
+from .langsmith_config import trace_function, LANGSMITH_ENABLED
+
+logger = logging.getLogger(__name__)
+
+if LANGSMITH_ENABLED:
+    logger.info("✅ LangSmith tracing enabled for OpenAI Client")
 
 
 class OpenAIClient:
@@ -30,6 +37,7 @@ class OpenAIClient:
 
         self.client = OpenAI(**client_kwargs)
 
+    @trace_function(name="openai_generate", tags=["llm", "openai"])
     def generate(self, prompt: str) -> str:
         """
         Generate a response from OpenAI.

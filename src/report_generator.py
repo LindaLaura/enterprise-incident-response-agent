@@ -93,16 +93,19 @@ class ReportGenerator:
             elements.append(Paragraph('Incident Report', title_style))
             elements.append(Spacer(1, 0.2*inch))
 
-            # Basic Info
+            # Basic Info - only include fields that have actual data
             info_data = [
                 ['Incident ID', incident.get('incident_id', 'N/A')],
                 ['Severity', incident.get('severity', 'N/A')],
                 ['Status', incident.get('status', 'Investigating')],
                 ['Timestamp', incident.get('timestamp', 'N/A')],
-                ['Confidence', f"{incident.get('confidence', 'N/A')}%"],
-                ['Affected Users', incident.get('affected_users', 'N/A')],
-                ['Duration', incident.get('duration', 'N/A')],
             ]
+            if incident.get('confidence') is not None and incident.get('confidence') != 'N/A':
+                info_data.append(['Confidence', f"{incident.get('confidence')}%"])
+            if incident.get('affected_users') and incident.get('affected_users') not in ['N/A', 'Unknown']:
+                info_data.append(['Affected Users', incident.get('affected_users')])
+            if incident.get('duration') and incident.get('duration') not in ['N/A', 'Unknown']:
+                info_data.append(['Duration', incident.get('duration')])
             info_table = Table(info_data, colWidths=[2*inch, 4*inch])
             info_table.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#f3f4f6')),
@@ -132,22 +135,22 @@ class ReportGenerator:
             ))
             elements.append(Spacer(1, 0.2*inch))
 
-            # Business Impact
-            if incident.get('business_impact'):
+            # Business Impact - only if real data (not default/hallucinated)
+            business_impact = incident.get('business_impact')
+            if business_impact and business_impact not in ['N/A', 'Unknown', incident.get('summary')]:
                 elements.append(Paragraph('Business Impact', styles['Heading2']))
-                elements.append(Paragraph(
-                    incident.get('business_impact', 'N/A'),
-                    styles['Normal']
-                ))
+                elements.append(Paragraph(business_impact, styles['Normal']))
                 elements.append(Spacer(1, 0.2*inch))
 
-            # Technical Impact
-            if incident.get('technical_impact'):
+            # Technical Impact - only if real data (not default/hallucinated)
+            technical_impact = incident.get('technical_impact')
+            if technical_impact and technical_impact not in ['N/A', 'Unknown', 'See root cause']:
                 elements.append(Paragraph('Technical Impact', styles['Heading2']))
-                elements.append(Paragraph(
-                    str(incident.get('technical_impact', 'N/A')),
-                    styles['Normal']
-                ))
+                if isinstance(technical_impact, list):
+                    for impact in technical_impact:
+                        elements.append(Paragraph(f"• {impact}", styles['Normal']))
+                else:
+                    elements.append(Paragraph(str(technical_impact), styles['Normal']))
                 elements.append(Spacer(1, 0.2*inch))
 
             # Affected Services
@@ -157,12 +160,16 @@ class ReportGenerator:
                 elements.append(Paragraph(services_text, styles['Normal']))
                 elements.append(Spacer(1, 0.2*inch))
 
-            # Evidence/Retrieved Docs
-            if incident.get('retrieved_docs'):
-                elements.append(Paragraph('Evidence Retrieved', styles['Heading2']))
-                for doc in incident.get('retrieved_docs', []):
-                    elements.append(Paragraph(f"• {doc}", styles['Normal']))
-                elements.append(Spacer(1, 0.2*inch))
+            # Evidence/Retrieved Docs - only if actual docs were retrieved
+            retrieved_docs = incident.get('retrieved_docs')
+            if retrieved_docs and isinstance(retrieved_docs, list) and len(retrieved_docs) > 0:
+                # Filter out empty/placeholder docs
+                real_docs = [d for d in retrieved_docs if d and str(d).strip() and str(d) not in ['N/A', 'Unknown']]
+                if real_docs:
+                    elements.append(Paragraph('Evidence Retrieved', styles['Heading2']))
+                    for doc in real_docs:
+                        elements.append(Paragraph(f"• {doc}", styles['Normal']))
+                    elements.append(Spacer(1, 0.2*inch))
 
             # Immediate Actions
             if incident.get('recommendations'):
@@ -172,49 +179,54 @@ class ReportGenerator:
                     elements.append(Paragraph(f"{i}. {rec}", styles['Normal']))
                 elements.append(Spacer(1, 0.2*inch))
 
-            # Timeline
-            if incident.get('timeline'):
+            # Timeline - only if actual events exist
+            timeline = incident.get('timeline')
+            if timeline and isinstance(timeline, list) and len(timeline) > 0:
                 elements.append(Paragraph('Timeline', styles['Heading2']))
-                timeline = incident.get('timeline', [])
-                if isinstance(timeline, list):
-                    for event in timeline:
-                        if isinstance(event, dict):
-                            time = event.get('time', 'N/A')
-                            event_text = event.get('event', str(event))
-                        else:
-                            event_text = str(event)
-                            time = ''
-                        elements.append(Paragraph(f"• {time}: {event_text}", styles['Normal']))
+                for event in timeline:
+                    if isinstance(event, dict):
+                        time = event.get('time', '')
+                        event_text = event.get('event', '')
+                    else:
+                        event_text = str(event)
+                        time = ''
+                    if event_text:
+                        elements.append(Paragraph(f"• {time}: {event_text}" if time else f"• {event_text}", styles['Normal']))
                 elements.append(Spacer(1, 0.2*inch))
 
-            # Events by Severity
-            if incident.get('events_by_severity'):
-                elements.append(Paragraph('Events by Severity', styles['Heading2']))
-                severity_dict = incident.get('events_by_severity', {})
-                if isinstance(severity_dict, dict):
-                    for severity, events in severity_dict.items():
-                        elements.append(Paragraph(f"<b>{severity}:</b>", styles['Normal']))
-                        if isinstance(events, list):
+            # Events by Severity - only if actual events exist
+            events_by_severity = incident.get('events_by_severity')
+            if events_by_severity and isinstance(events_by_severity, dict) and len(events_by_severity) > 0:
+                # Filter out empty severity buckets
+                has_events = any(isinstance(events, list) and len(events) > 0 for events in events_by_severity.values())
+                if has_events:
+                    elements.append(Paragraph('Events by Severity', styles['Heading2']))
+                    for severity, events in events_by_severity.items():
+                        if isinstance(events, list) and len(events) > 0:
+                            elements.append(Paragraph(f"<b>{severity}:</b>", styles['Normal']))
                             for event in events:
                                 elements.append(Paragraph(f"  • {event}", styles['Normal']))
-                elements.append(Spacer(1, 0.2*inch))
+                    elements.append(Spacer(1, 0.2*inch))
 
-            # Similar Incidents
-            if incident.get('memory_context', {}).get('similar_incidents'):
-                elements.append(Paragraph('Similar Incidents from History', styles['Heading2']))
-                similar = incident.get('memory_context', {}).get('similar_incidents', [])
-                for sim in similar:
-                    elements.append(Paragraph(f"• {sim}", styles['Normal']))
-                elements.append(Spacer(1, 0.2*inch))
+            # Similar Incidents - only if actual similar incidents found
+            similar_incidents = incident.get('memory_context', {}).get('similar_incidents')
+            if similar_incidents and isinstance(similar_incidents, list) and len(similar_incidents) > 0:
+                real_similar = [s for s in similar_incidents if s and str(s).strip() and str(s) not in ['N/A', 'Unknown']]
+                if real_similar:
+                    elements.append(Paragraph('Similar Incidents from History', styles['Heading2']))
+                    for sim in real_similar:
+                        elements.append(Paragraph(f"• {sim}", styles['Normal']))
+                    elements.append(Spacer(1, 0.2*inch))
 
-            # Next Steps
-            if incident.get('next_steps'):
-                elements.append(Paragraph('Next Steps', styles['Heading2']))
-                next_steps = incident.get('next_steps', [])
-                if isinstance(next_steps, list):
-                    for i, step in enumerate(next_steps, 1):
+            # Next Steps - only if actual steps exist
+            next_steps = incident.get('next_steps')
+            if next_steps and isinstance(next_steps, list) and len(next_steps) > 0:
+                real_steps = [s for s in next_steps if s and str(s).strip() and str(s) not in ['N/A', 'Unknown']]
+                if real_steps:
+                    elements.append(Paragraph('Next Steps', styles['Heading2']))
+                    for i, step in enumerate(real_steps, 1):
                         elements.append(Paragraph(f"{i}. {step}", styles['Normal']))
-                elements.append(Spacer(1, 0.2*inch))
+                    elements.append(Spacer(1, 0.2*inch))
 
             # Generated info
             elements.append(Spacer(1, 0.3*inch))
