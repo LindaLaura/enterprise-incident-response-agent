@@ -99,6 +99,9 @@ class ReportGenerator:
                 ['Severity', incident.get('severity', 'N/A')],
                 ['Status', incident.get('status', 'Investigating')],
                 ['Timestamp', incident.get('timestamp', 'N/A')],
+                ['Confidence', f"{incident.get('confidence', 'N/A')}%"],
+                ['Affected Users', incident.get('affected_users', 'N/A')],
+                ['Duration', incident.get('duration', 'N/A')],
             ]
             info_table = Table(info_data, colWidths=[2*inch, 4*inch])
             info_table.setStyle(TableStyle([
@@ -129,6 +132,24 @@ class ReportGenerator:
             ))
             elements.append(Spacer(1, 0.2*inch))
 
+            # Business Impact
+            if incident.get('business_impact'):
+                elements.append(Paragraph('Business Impact', styles['Heading2']))
+                elements.append(Paragraph(
+                    incident.get('business_impact', 'N/A'),
+                    styles['Normal']
+                ))
+                elements.append(Spacer(1, 0.2*inch))
+
+            # Technical Impact
+            if incident.get('technical_impact'):
+                elements.append(Paragraph('Technical Impact', styles['Heading2']))
+                elements.append(Paragraph(
+                    str(incident.get('technical_impact', 'N/A')),
+                    styles['Normal']
+                ))
+                elements.append(Spacer(1, 0.2*inch))
+
             # Affected Services
             if incident.get('affected_services'):
                 elements.append(Paragraph('Affected Services', styles['Heading2']))
@@ -136,13 +157,64 @@ class ReportGenerator:
                 elements.append(Paragraph(services_text, styles['Normal']))
                 elements.append(Spacer(1, 0.2*inch))
 
-            # Recommendations
+            # Evidence/Retrieved Docs
+            if incident.get('retrieved_docs'):
+                elements.append(Paragraph('Evidence Retrieved', styles['Heading2']))
+                for doc in incident.get('retrieved_docs', []):
+                    elements.append(Paragraph(f"• {doc}", styles['Normal']))
+                elements.append(Spacer(1, 0.2*inch))
+
+            # Immediate Actions
             if incident.get('recommendations'):
                 elements.append(PageBreak())
-                elements.append(Paragraph('Recommendations', styles['Heading2']))
+                elements.append(Paragraph('Immediate Actions', styles['Heading2']))
                 for i, rec in enumerate(incident['recommendations'], 1):
                     elements.append(Paragraph(f"{i}. {rec}", styles['Normal']))
-                elements.append(Spacer(1, 0.1*inch))
+                elements.append(Spacer(1, 0.2*inch))
+
+            # Timeline
+            if incident.get('timeline'):
+                elements.append(Paragraph('Timeline', styles['Heading2']))
+                timeline = incident.get('timeline', [])
+                if isinstance(timeline, list):
+                    for event in timeline:
+                        if isinstance(event, dict):
+                            time = event.get('time', 'N/A')
+                            event_text = event.get('event', str(event))
+                        else:
+                            event_text = str(event)
+                            time = ''
+                        elements.append(Paragraph(f"• {time}: {event_text}", styles['Normal']))
+                elements.append(Spacer(1, 0.2*inch))
+
+            # Events by Severity
+            if incident.get('events_by_severity'):
+                elements.append(Paragraph('Events by Severity', styles['Heading2']))
+                severity_dict = incident.get('events_by_severity', {})
+                if isinstance(severity_dict, dict):
+                    for severity, events in severity_dict.items():
+                        elements.append(Paragraph(f"<b>{severity}:</b>", styles['Normal']))
+                        if isinstance(events, list):
+                            for event in events:
+                                elements.append(Paragraph(f"  • {event}", styles['Normal']))
+                elements.append(Spacer(1, 0.2*inch))
+
+            # Similar Incidents
+            if incident.get('memory_context', {}).get('similar_incidents'):
+                elements.append(Paragraph('Similar Incidents from History', styles['Heading2']))
+                similar = incident.get('memory_context', {}).get('similar_incidents', [])
+                for sim in similar:
+                    elements.append(Paragraph(f"• {sim}", styles['Normal']))
+                elements.append(Spacer(1, 0.2*inch))
+
+            # Next Steps
+            if incident.get('next_steps'):
+                elements.append(Paragraph('Next Steps', styles['Heading2']))
+                next_steps = incident.get('next_steps', [])
+                if isinstance(next_steps, list):
+                    for i, step in enumerate(next_steps, 1):
+                        elements.append(Paragraph(f"{i}. {step}", styles['Normal']))
+                elements.append(Spacer(1, 0.2*inch))
 
             # Generated info
             elements.append(Spacer(1, 0.3*inch))
