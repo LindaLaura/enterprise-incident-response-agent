@@ -11,10 +11,17 @@ import time
 import shutil
 import sqlite3
 import uuid
+import logging
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from pydantic import BaseModel, Field, field_validator, ConfigDict
+from .langsmith_config import trace_function, LANGSMITH_ENABLED
+
+logger = logging.getLogger(__name__)
+
+if LANGSMITH_ENABLED:
+    logger.info("✅ LangSmith tracing enabled for Memory Manager")
 
 
 class IncidentRecord(BaseModel):
@@ -337,6 +344,7 @@ class MemoryManager:
 
     # Long-term memory methods
 
+    @trace_function(name="save_incident", tags=["memory", "incident"])
     def save_incident(
         self,
         incident_id: str,
@@ -346,7 +354,15 @@ class MemoryManager:
         severity: str,
         affected_services: List[str],
         incident_timestamp: Optional[str] = None,
-        events_by_severity: Optional[Dict[str, List[Dict[str, str]]]] = None
+        events_by_severity: Optional[Dict[str, List[Dict[str, str]]]] = None,
+        retrieved_docs: Optional[List[str]] = None,
+        technical_impact: Optional[str] = None,
+        business_impact: Optional[str] = None,
+        confidence: Optional[int] = None,
+        affected_users: Optional[str] = None,
+        duration: Optional[str] = None,
+        timeline: Optional[List[Dict[str, str]]] = None,
+        next_steps: Optional[List[str]] = None
     ):
         """
         Save incident to long-term memory.
@@ -360,6 +376,14 @@ class MemoryManager:
             affected_services: List of affected services
             incident_timestamp: When the incident occurred (from logs)
             events_by_severity: Categorized events with timestamp and service (CRITICAL, ERROR, WARN, INFO)
+            retrieved_docs: Evidence documents retrieved during analysis
+            technical_impact: Technical impact of the incident
+            business_impact: Business impact of the incident
+            confidence: Confidence score of the analysis
+            affected_users: Number or description of affected users
+            duration: Incident duration
+            timeline: List of timeline events
+            next_steps: List of next steps for remediation
         """
         # Reload to get latest state (important for concurrent access)
         self.long_term = self._load_long_term()
@@ -381,6 +405,28 @@ class MemoryManager:
         # Add categorized events if provided
         if events_by_severity:
             incident_record['events_by_severity'] = events_by_severity
+
+        # Add evidence documents if provided
+        if retrieved_docs:
+            incident_record['retrieved_docs'] = retrieved_docs
+
+        # Add impact and confidence if provided
+        if technical_impact:
+            incident_record['technical_impact'] = technical_impact
+        if business_impact:
+            incident_record['business_impact'] = business_impact
+        if confidence is not None:
+            incident_record['confidence'] = confidence
+
+        # Add additional fields if provided
+        if affected_users:
+            incident_record['affected_users'] = affected_users
+        if duration:
+            incident_record['duration'] = duration
+        if timeline:
+            incident_record['timeline'] = timeline
+        if next_steps:
+            incident_record['next_steps'] = next_steps
 
         self.long_term['incidents'].append(incident_record)
         self.long_term['metadata']['total_incidents'] += 1

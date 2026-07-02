@@ -8,9 +8,9 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables FIRST
+# Load environment variables FIRST (with override to ensure correct values)
 env_path = Path(__file__).resolve().parent.parent.parent / ".env"
-load_dotenv(env_path)
+load_dotenv(env_path, override=True)
 
 
 from fastapi import FastAPI, WebSocket, UploadFile, File, HTTPException
@@ -30,9 +30,13 @@ from ..services.chatbot import IncidentChatbot
 from ..openai_client import OpenAIClient
 from ..agents.manager import AgentManager
 from ..report_generator import ReportGenerator
+from ..langsmith_config import trace_function, LANGSMITH_ENABLED
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+if LANGSMITH_ENABLED:
+    logger.info("✅ LangSmith tracing enabled")
 
 # Initialize components
 memory_manager = MemoryManager(memory_dir="./memory")
@@ -264,6 +268,7 @@ def update_progress(step_id: int, status: str, duration: str = None):
             analysis_progress["steps"][step_id - 1]["duration"] = duration
 
 
+@trace_function(name="analyze_incident", tags=["analysis", "pipeline"])
 async def analyze_incident(user_input: str) -> str:
     """Analyze incident using agent pipeline with progress tracking."""
     global analysis_progress
@@ -311,18 +316,36 @@ async def analyze_incident(user_input: str) -> str:
             # Get final report
             final_report = result or {}
 
-            # Save incident to memory
+            # Save incident to memory with evidence
             try:
                 incident_id = final_report.get('incident_id', f'INC-{int(datetime.now().timestamp())}')
+
+                # Extract retrieved docs from context
+                retrieved_docs = []
+                if agent_manager.context.get('retrieved_docs'):
+                    retrieved = agent_manager.context.get('retrieved_docs')
+                    if isinstance(retrieved, str):
+                        retrieved_docs = [d.strip() for d in retrieved.split('\n') if d.strip()][:3]
+                    elif isinstance(retrieved, list):
+                        retrieved_docs = retrieved[:3]
+
                 memory_manager.save_incident(
                     incident_id=incident_id,
                     summary=final_report.get('summary', 'Analysis completed'),
                     root_cause=final_report.get('root_cause', 'Unknown'),
                     recommendations=final_report.get('recommendations', {}).get('immediate_actions', []),
                     severity=final_report.get('severity', 'MEDIUM'),
-                    affected_services=final_report.get('affected_systems', [])
+                    affected_services=final_report.get('affected_systems', []),
+                    retrieved_docs=retrieved_docs,
+                    technical_impact=root_cause_analysis.get('contributing_factors', []),
+                    business_impact=final_report.get('summary', 'N/A'),
+                    confidence=confidence,
+                    affected_users=final_report.get('affected_users', 'N/A'),
+                    duration=final_report.get('duration', 'N/A'),
+                    timeline=final_report.get('timeline', []),
+                    next_steps=final_report.get('recommendations', {}).get('long_term_improvements', [])
                 )
-                logger.info(f"✅ Saved incident {incident_id} to memory")
+                logger.info(f"✅ Saved incident {incident_id} to memory with {len(retrieved_docs)} evidence items")
             except Exception as save_error:
                 logger.warning(f"⚠️ Failed to save incident: {save_error}")
 
@@ -484,16 +507,30 @@ async def get_latest_incident():
     elif not affected_services and 'order' in latest.get('summary', '').lower():
         affected_services = ['Order Service', 'Payment Service']
 
+    # Extract evidence from incident
+    evidence = []
+    if latest.get('retrieved_docs'):
+        retrieved_docs = latest.get('retrieved_docs')
+        if isinstance(retrieved_docs, list):
+            for idx, doc in enumerate(retrieved_docs[:3]):
+                evidence.append({
+                    "id": f"doc_{idx}",
+                    "name": str(doc)[:60] if isinstance(doc, str) else str(doc),
+                    "relevance": 85 + (10 - idx*2),
+                    "meta": "Retrieved from knowledge base",
+                    "type": "document"
+                })
+
     return {
         "incident_id": latest.get('incident_id', f"INC-{len(incidents):04d}"),
         "timestamp": latest.get('timestamp', datetime.now().isoformat()),
-        "confidence": 85,  # Default confidence for stored incidents
+        "confidence": latest.get('confidence', 85),
         "severity": latest.get('severity', 'Unknown'),
         "status": "Analyzed",
         "affected_users": "N/A",  # Not always tracked
         "duration": "N/A",
         "primary_cause": latest.get('root_cause', 'Unknown'),
-        "business_impact": latest.get('summary', 'N/A'),
+        "business_impact": latest.get('business_impact', latest.get('summary', 'N/A')),
         "technical_impact": latest.get('technical_impact', 'See root cause'),
         "affected_services": affected_services,
         "immediate_action": (
@@ -503,7 +540,8 @@ async def get_latest_incident():
         ),
         "summary": latest.get('summary', 'Incident Summary'),
         "root_cause": latest.get('root_cause', 'Unknown'),
-        "recommendations": latest.get('recommendations', [])
+        "recommendations": latest.get('recommendations', []),
+        "evidence": evidence
     }
 
 
@@ -624,21 +662,37 @@ async def analyze_logs(request: dict):
             }
         ]
 
+        # Extract real data from agent analysis
+        final_report = analysis_result or {}
+        root_cause_analysis = agent_manager.context.get('root_cause', {})
+        recommendations = agent_manager.context.get('recommendations', {})
+        retrieved_docs = agent_manager.context.get('retrieved_docs', {})
+        memory_info = agent_manager.context.get('memory_info', {})
+
+        # Calculate confidence based on available data
+        confidence = _calculate_confidence(
+            root_cause=root_cause_analysis,
+            retrieved_docs=retrieved_docs,
+            memory_info=memory_info
+        )
+
         return {
             "status": "success",
-            "confidence": 92,
-            "severity": "Critical",
-            "status_text": "Investigating",
-            "affected_users": "~5,000 users",
-            "duration": "15 minutes",
-            "primary_cause": "Database connection pool exhaustion due to increased query load",
-            "business_impact": "Order processing service is unavailable. Estimated revenue loss: $50K/minute",
-            "technical_impact": "Connection pool at 100% capacity, new requests timing out after 30 seconds",
-            "affected_services": ["api-gateway", "order-service", "payment-service"],
-            "immediate_action": "1. Increase connection pool size to 300. 2. Kill long-running queries. 3. Scale database replicas.",
+            "confidence": confidence,
+            "severity": final_report.get('severity', root_cause_analysis.get('severity', 'High')),
+            "status_text": final_report.get('status', 'Investigating'),
+            "affected_users": final_report.get('affected_users', 'Unknown'),
+            "duration": final_report.get('duration', 'Unknown'),
+            "primary_cause": final_report.get('root_cause', root_cause_analysis.get('primary_cause', 'Unknown')),
+            "business_impact": final_report.get('summary', 'Analysis completed'),
+            "technical_impact": ', '.join(root_cause_analysis.get('contributing_factors', [])) if root_cause_analysis.get('contributing_factors') else 'See root cause',
+            "affected_services": root_cause_analysis.get('affected_systems', []),
+            "immediate_action": _extract_immediate_actions(recommendations),
             "evidence": evidence,
             "similar_incidents": similar_incidents,
-            "full_analysis": analysis_result
+            "full_analysis": analysis_result,
+            "summary": final_report.get('summary', 'Incident analysis complete'),
+            "recommendations": recommendations
         }
 
     except Exception as e:
@@ -657,12 +711,33 @@ async def generate_report(request: dict):
     try:
         incident_id = request.get("incident_id")
         format = request.get("format", "json")
+        incident_data = request.get("incident_data")  # Optional: raw incident data from frontend
 
         if not incident_id:
             raise ValueError("incident_id is required")
 
         if format not in ["pdf", "json", "csv"]:
             raise ValueError(f"Unsupported format: {format}")
+
+        # If incident_data is provided, save it to memory first (for Analyze Incident page)
+        if incident_data:
+            try:
+                memory_manager.save_incident(
+                    incident_id=incident_id,
+                    summary=incident_data.get('summary', 'Analysis completed'),
+                    root_cause=incident_data.get('root_cause', 'Unknown'),
+                    recommendations=[incident_data.get('immediate_action', 'No actions')],
+                    severity=incident_data.get('severity', 'MEDIUM'),
+                    affected_services=incident_data.get('affected_services', []),
+                    affected_users=incident_data.get('affected_users', 'N/A'),
+                    duration=incident_data.get('duration', 'N/A'),
+                    timeline=incident_data.get('timeline', []),
+                    confidence=incident_data.get('confidence', 0),
+                    business_impact=incident_data.get('business_impact', 'N/A')
+                )
+                logger.info(f"✅ Saved incident {incident_id} to memory for reporting")
+            except Exception as save_error:
+                logger.warning(f"⚠️ Could not save incident to memory: {save_error}")
 
         # Generate report
         report_data = report_generator.generate_report(incident_id, format)
@@ -785,6 +860,59 @@ def _get_media_type(format: str) -> str:
         "csv": "text/csv"
     }
     return media_types.get(format, "application/octet-stream")
+
+
+def _calculate_confidence(root_cause: dict, retrieved_docs: dict, memory_info: dict) -> int:
+    """
+    Calculate confidence score based on analysis data availability.
+
+    Confidence calculation:
+    - Base: 50%
+    - Root cause identified: +20%
+    - Retrieved relevant docs: +15%
+    - Similar incidents found in memory: +15%
+    - Max: 100%
+    """
+    confidence = 50
+
+    # Root cause identified
+    if root_cause and root_cause.get('primary_cause'):
+        confidence += 20
+
+    # Retrieved docs available
+    if retrieved_docs:
+        if isinstance(retrieved_docs, dict) and retrieved_docs.get('top_results'):
+            confidence += 15
+        elif isinstance(retrieved_docs, list) and len(retrieved_docs) > 0:
+            confidence += 15
+
+    # Similar incidents found
+    if memory_info:
+        if isinstance(memory_info, list) and len(memory_info) > 0:
+            confidence += 15
+        elif isinstance(memory_info, dict) and memory_info.get('similar_incidents'):
+            confidence += 15
+
+    return min(confidence, 100)
+
+
+def _extract_immediate_actions(recommendations: dict) -> str:
+    """Extract immediate actions from recommendations."""
+    if not recommendations:
+        return "No recommendations available"
+
+    if isinstance(recommendations, dict):
+        if recommendations.get('immediate_actions'):
+            actions = recommendations['immediate_actions']
+            if isinstance(actions, list):
+                return '. '.join([str(a) for a in actions])
+            return str(actions)
+        elif recommendations.get('steps'):
+            steps = recommendations['steps']
+            if isinstance(steps, list):
+                return '. '.join([f"{i+1}. {str(s)}" for i, s in enumerate(steps)])
+
+    return "No immediate actions specified"
 
 
 if __name__ == "__main__":
