@@ -527,12 +527,15 @@ async def get_latest_incident():
         "confidence": latest.get('confidence', 85),
         "severity": latest.get('severity', 'Unknown'),
         "status": "Analyzed",
-        "affected_users": "N/A",  # Not always tracked
-        "duration": "N/A",
+        "affected_users": latest.get('affected_users', 'N/A'),
+        "duration": latest.get('duration', 'N/A'),
         "primary_cause": latest.get('root_cause', 'Unknown'),
         "business_impact": latest.get('business_impact', latest.get('summary', 'N/A')),
         "technical_impact": latest.get('technical_impact', 'See root cause'),
         "affected_services": affected_services,
+        "timeline": latest.get('timeline', []),
+        "events_by_severity": latest.get('events_by_severity', {}),
+        "next_steps": latest.get('next_steps', []),
         "immediate_action": (
             latest.get('recommendations', ['No recommendations available'])[0]
             if latest.get('recommendations')
