@@ -121,8 +121,8 @@ const AnalyzeIncident = ({ wsRef }) => {
       timestamp: new Date().toISOString(),
       summary: analysis.summary || analysis.full_analysis || 'Incident Summary',
       severity: analysis.severity || 'Unknown',
-      status: 'Analyzed',
-      root_cause: analysis.primary_cause || 'Unknown',
+      status: analysis.status || 'Analyzed',
+      root_cause: analysis.root_cause || analysis.primary_cause || 'Unknown',
       primary_cause: analysis.primary_cause || 'Unknown',
       business_impact: analysis.business_impact || 'N/A',
       technical_impact: analysis.technical_impact || 'N/A',
@@ -131,7 +131,18 @@ const AnalyzeIncident = ({ wsRef }) => {
       duration: analysis.duration || 'N/A',
       immediate_action: analysis.immediate_action || 'No immediate actions',
       recommendations: analysis.recommendations || [],
-      confidence: analysis.confidence || 85
+      confidence: analysis.confidence || 85,
+      // Comprehensive analysis fields
+      incident_timestamp: analysis.incident_timestamp,
+      incident_summary: analysis.incident_summary || analysis.summary,
+      source_analysis: analysis.source_analysis,
+      rag_context: analysis.rag_context,
+      memory_context: analysis.memory_context,
+      root_cause_analysis: analysis.root_cause_analysis,
+      events_by_severity: analysis.events_by_severity,
+      timeline: analysis.timeline,
+      next_steps: analysis.next_steps,
+      metadata: analysis.metadata
     };
 
     setReportModal({

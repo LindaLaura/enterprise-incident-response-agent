@@ -159,7 +159,8 @@ const Dashboard = ({ wsRef }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           incident_id: incident.incident_id,
-          format: format
+          format: format,
+          incident_data: incident
         })
       });
 

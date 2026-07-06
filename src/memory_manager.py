@@ -362,28 +362,42 @@ class MemoryManager:
         affected_users: Optional[str] = None,
         duration: Optional[str] = None,
         timeline: Optional[List[Dict[str, str]]] = None,
-        next_steps: Optional[List[str]] = None
+        next_steps: Optional[List[str]] = None,
+        incident_summary: Optional[str] = None,
+        source_analysis: Optional[Dict[str, Any]] = None,
+        rag_context: Optional[Dict[str, Any]] = None,
+        memory_context: Optional[Dict[str, Any]] = None,
+        root_cause_analysis: Optional[Dict[str, Any]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        status: Optional[str] = None
     ):
         """
-        Save incident to long-term memory.
+        Save incident to long-term memory with comprehensive analysis data.
 
         Args:
             incident_id: Unique incident identifier
             summary: Incident summary
-            root_cause: Root cause analysis
+            root_cause: Root cause analysis string
             recommendations: List of recommendations
             severity: Incident severity
             affected_services: List of affected services
-            incident_timestamp: When the incident occurred (from logs)
-            events_by_severity: Categorized events with timestamp and service (CRITICAL, ERROR, WARN, INFO)
-            retrieved_docs: Evidence documents retrieved during analysis
-            technical_impact: Technical impact of the incident
-            business_impact: Business impact of the incident
-            confidence: Confidence score of the analysis
-            affected_users: Number or description of affected users
+            incident_timestamp: When incident occurred
+            events_by_severity: Events categorized by severity (CRITICAL, ERROR, WARN, INFO)
+            retrieved_docs: RAG-retrieved documents
+            technical_impact: Technical impact description
+            business_impact: Business impact description
+            confidence: Analysis confidence score (0-100)
+            affected_users: Number of affected users
             duration: Incident duration
-            timeline: List of timeline events
-            next_steps: List of next steps for remediation
+            timeline: Detailed timeline with timestamps and components
+            next_steps: P0/P1/P2/P3 remediation steps
+            incident_summary: Comprehensive incident summary
+            source_analysis: Log evidence and source documentation
+            rag_context: Retrieved documents and confidence
+            memory_context: Similar past incidents and references
+            root_cause_analysis: Structured root cause with confidence and evidence
+            metadata: Generation metadata (model, timestamps, etc)
+            status: Incident status (INVESTIGATING, RESOLVED, etc)
         """
         # Reload to get latest state (important for concurrent access)
         self.long_term = self._load_long_term()
@@ -427,6 +441,22 @@ class MemoryManager:
             incident_record['timeline'] = timeline
         if next_steps:
             incident_record['next_steps'] = next_steps
+
+        # Add comprehensive analysis fields
+        if incident_summary:
+            incident_record['incident_summary'] = incident_summary
+        if source_analysis:
+            incident_record['source_analysis'] = source_analysis
+        if rag_context:
+            incident_record['rag_context'] = rag_context
+        if memory_context:
+            incident_record['memory_context'] = memory_context
+        if root_cause_analysis:
+            incident_record['root_cause_analysis'] = root_cause_analysis
+        if metadata:
+            incident_record['metadata'] = metadata
+        if status:
+            incident_record['status'] = status
 
         self.long_term['incidents'].append(incident_record)
         self.long_term['metadata']['total_incidents'] += 1

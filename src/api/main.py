@@ -13,7 +13,7 @@ env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(env_path, override=True)
 
 
-from fastapi import FastAPI, WebSocket, UploadFile, File, HTTPException
+from fastapi import FastAPI, WebSocket, UploadFile, File, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
@@ -269,7 +269,7 @@ def update_progress(step_id: int, status: str, duration: str = None):
 
 
 @trace_function(name="analyze_incident", tags=["analysis", "pipeline"])
-async def analyze_incident(user_input: str) -> str:
+async def analyze_incident(user_input: str) -> dict:
     """Analyze incident using agent pipeline with progress tracking."""
     global analysis_progress
     try:
@@ -339,7 +339,7 @@ async def analyze_incident(user_input: str) -> str:
                     incident_id=incident_id,
                     summary=final_report.get('summary', 'Analysis completed'),
                     root_cause=final_report.get('root_cause', 'Unknown'),
-                    recommendations=final_report.get('recommendations', {}).get('immediate_actions', []),
+                    recommendations=final_report.get('recommendations', {}).get('immediate_actions', []) if isinstance(final_report.get('recommendations'), dict) else final_report.get('recommendations', []),
                     severity=final_report.get('severity', 'MEDIUM'),
                     affected_services=affected_services,
                     retrieved_docs=retrieved_docs,
@@ -349,37 +349,23 @@ async def analyze_incident(user_input: str) -> str:
                     affected_users=final_report.get('affected_users', 'N/A'),
                     duration=final_report.get('duration', 'N/A'),
                     timeline=final_report.get('timeline', []),
-                    events_by_severity=root_cause_data.get('events_by_severity', {}),
-                    next_steps=final_report.get('recommendations', {}).get('long_term_improvements', [])
+                    events_by_severity=final_report.get('events_by_severity', root_cause_data.get('events_by_severity', {})),
+                    next_steps=final_report.get('next_steps', []) or final_report.get('recommendations', {}).get('long_term_improvements', []),
+                    incident_timestamp=final_report.get('incident_timestamp'),
+                    incident_summary=final_report.get('incident_summary'),
+                    source_analysis=final_report.get('source_analysis'),
+                    rag_context=final_report.get('rag_context'),
+                    memory_context=final_report.get('memory_context'),
+                    root_cause_analysis=final_report.get('root_cause_analysis') or root_cause_data,
+                    metadata=final_report.get('metadata'),
+                    status=final_report.get('status')
                 )
                 logger.info(f"✅ Saved incident {incident_id} to memory with {len(retrieved_docs)} evidence items")
             except Exception as save_error:
                 logger.warning(f"⚠️ Failed to save incident: {save_error}")
 
-            # Convert to string for chat response
-            response = f"""
-## Incident Analysis Report
-
-**Incident ID**: {final_report.get('incident_id', 'N/A')}
-**Severity**: {final_report.get('severity', 'Unknown')}
-**Status**: {final_report.get('status', 'Unknown')}
-
-### Summary
-{final_report.get('summary', 'Analysis in progress...')}
-
-### Root Cause
-{final_report.get('root_cause', 'Unknown')}
-
-### Affected Systems
-{', '.join(final_report.get('affected_systems', []))}
-
-### Immediate Actions
-{chr(10).join(f"- {action}" for action in final_report.get('recommendations', {}).get('immediate_actions', []))}
-
-### Confidence Level
-{final_report.get('confidence', 0)}%
-"""
-            return response
+            # Return the full analysis report with all comprehensive data
+            return final_report
 
         except Exception as e:
             logger.error(f"Agent pipeline error: {e}")
@@ -387,7 +373,7 @@ async def analyze_incident(user_input: str) -> str:
 
     except Exception as e:
         logger.error(f"Analysis error: {e}")
-        return f"Error during analysis: {str(e)}"
+        return {"status": "error", "message": str(e)}
 
 
 @app.get("/api/incidents")
@@ -551,7 +537,16 @@ async def get_latest_incident():
         "summary": latest.get('summary', 'Incident Summary'),
         "root_cause": latest.get('root_cause', 'Unknown'),
         "recommendations": latest.get('recommendations', []),
-        "evidence": evidence
+        "evidence": evidence,
+        "incident_id": latest.get('incident_id'),
+        "incident_timestamp": latest.get('incident_timestamp'),
+        "incident_summary": latest.get('incident_summary'),
+        "source_analysis": latest.get('source_analysis'),
+        "rag_context": latest.get('rag_context'),
+        "memory_context": latest.get('memory_context'),
+        "root_cause_analysis": latest.get('root_cause_analysis'),
+        "metadata": latest.get('metadata'),
+        "status": latest.get('status', 'Analyzed')
     }
 
 
@@ -624,10 +619,10 @@ async def get_chat_history(limit: int = 50):
 
 
 @app.post("/api/chat/analyze")
-async def analyze_logs(request: dict):
+async def analyze_logs(logs_data: dict = Body(...)):
     """Analyze incident logs with full results."""
     try:
-        logs = request.get("logs", "")
+        logs = logs_data.get("logs", "")
         if not logs:
             raise ValueError("No logs provided")
 
@@ -702,7 +697,21 @@ async def analyze_logs(request: dict):
             "similar_incidents": similar_incidents,
             "full_analysis": analysis_result,
             "summary": final_report.get('summary', 'Incident analysis complete'),
-            "recommendations": recommendations
+            "recommendations": recommendations,
+            # Comprehensive analysis fields
+            "incident_id": f"INC-{datetime.now().timestamp()}",
+            "incident_timestamp": final_report.get('incident_timestamp'),
+            "incident_summary": final_report.get('incident_summary', final_report.get('summary')),
+            "source_analysis": final_report.get('source_analysis'),
+            "rag_context": final_report.get('rag_context'),
+            "memory_context": final_report.get('memory_context'),
+            "root_cause_analysis": final_report.get('root_cause_analysis', root_cause_analysis),
+            "events_by_severity": final_report.get('events_by_severity', root_cause_analysis.get('events_by_severity')),
+            "timeline": final_report.get('timeline'),
+            "next_steps": final_report.get('next_steps') or final_report.get('recommendations', {}).get('long_term_improvements', []),
+            "metadata": final_report.get('metadata'),
+            "root_cause": final_report.get('root_cause', 'Unknown'),
+            "status": final_report.get('status', 'Analyzed')
         }
 
     except Exception as e:
@@ -716,12 +725,12 @@ async def analyze_logs(request: dict):
 # ═══ REPORT MANAGEMENT ENDPOINTS ═══
 
 @app.post("/api/report/generate")
-async def generate_report(request: dict):
+async def generate_report(report_request: dict = Body(...)):
     """Generate report for an incident."""
     try:
-        incident_id = request.get("incident_id")
-        format = request.get("format", "json")
-        incident_data = request.get("incident_data")  # Optional: raw incident data from frontend
+        incident_id = report_request.get("incident_id")
+        format = report_request.get("format", "json")
+        incident_data = report_request.get("incident_data")  # Optional: raw incident data from frontend
 
         if not incident_id:
             raise ValueError("incident_id is required")
@@ -734,16 +743,25 @@ async def generate_report(request: dict):
             try:
                 memory_manager.save_incident(
                     incident_id=incident_id,
-                    summary=incident_data.get('summary', 'Analysis completed'),
+                    summary=incident_data.get('summary', incident_data.get('incident_summary', 'Analysis completed')),
                     root_cause=incident_data.get('root_cause', 'Unknown'),
-                    recommendations=[incident_data.get('immediate_action', 'No actions')],
+                    recommendations=incident_data.get('recommendations', [incident_data.get('immediate_action', 'No actions')]) if isinstance(incident_data.get('recommendations'), list) else [incident_data.get('immediate_action', 'No actions')],
                     severity=incident_data.get('severity', 'MEDIUM'),
                     affected_services=incident_data.get('affected_services', []),
                     affected_users=incident_data.get('affected_users', 'N/A'),
                     duration=incident_data.get('duration', 'N/A'),
                     timeline=incident_data.get('timeline', []),
                     confidence=incident_data.get('confidence', 0),
-                    business_impact=incident_data.get('business_impact', 'N/A')
+                    business_impact=incident_data.get('business_impact', 'N/A'),
+                    events_by_severity=incident_data.get('events_by_severity'),
+                    incident_timestamp=incident_data.get('incident_timestamp'),
+                    incident_summary=incident_data.get('incident_summary'),
+                    source_analysis=incident_data.get('source_analysis'),
+                    rag_context=incident_data.get('rag_context'),
+                    memory_context=incident_data.get('memory_context'),
+                    root_cause_analysis=incident_data.get('root_cause_analysis'),
+                    metadata=incident_data.get('metadata'),
+                    status=incident_data.get('status')
                 )
                 logger.info(f"✅ Saved incident {incident_id} to memory for reporting")
             except Exception as save_error:

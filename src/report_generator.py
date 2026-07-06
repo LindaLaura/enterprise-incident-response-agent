@@ -228,6 +228,69 @@ class ReportGenerator:
                         elements.append(Paragraph(f"{i}. {step}", styles['Normal']))
                     elements.append(Spacer(1, 0.2*inch))
 
+            # Source Analysis
+            source_analysis = incident.get('source_analysis')
+            if source_analysis and isinstance(source_analysis, dict):
+                elements.append(PageBreak())
+                elements.append(Paragraph('Source Analysis', styles['Heading2']))
+                if source_analysis.get('log_evidence'):
+                    elements.append(Paragraph('<b>Log Evidence:</b>', styles['Normal']))
+                    for evidence in source_analysis['log_evidence']:
+                        elements.append(Paragraph(f"• {evidence}", styles['Normal']))
+                if source_analysis.get('retrieved_documents'):
+                    elements.append(Paragraph('<b>Retrieved Documents:</b>', styles['Normal']))
+                    for doc in source_analysis['retrieved_documents']:
+                        elements.append(Paragraph(f"• {doc}", styles['Normal']))
+                if source_analysis.get('memory_references'):
+                    elements.append(Paragraph('<b>Memory References:</b>', styles['Normal']))
+                    for ref in source_analysis['memory_references']:
+                        elements.append(Paragraph(f"• {ref}", styles['Normal']))
+                elements.append(Spacer(1, 0.2*inch))
+
+            # Root Cause Analysis Details
+            root_cause_analysis = incident.get('root_cause_analysis')
+            if root_cause_analysis and isinstance(root_cause_analysis, dict):
+                elements.append(Paragraph('Root Cause Analysis Details', styles['Heading2']))
+                if root_cause_analysis.get('primary_cause'):
+                    elements.append(Paragraph(f"<b>Primary Cause:</b> {root_cause_analysis['primary_cause']}", styles['Normal']))
+                if root_cause_analysis.get('confidence_level'):
+                    elements.append(Paragraph(f"<b>Confidence Level:</b> {root_cause_analysis['confidence_level']}", styles['Normal']))
+                if root_cause_analysis.get('supporting_evidence'):
+                    elements.append(Paragraph('<b>Supporting Evidence:</b>', styles['Normal']))
+                    for evidence in root_cause_analysis['supporting_evidence']:
+                        elements.append(Paragraph(f"• {evidence}", styles['Normal']))
+                elements.append(Spacer(1, 0.2*inch))
+
+            # RAG Context
+            rag_context = incident.get('rag_context')
+            if rag_context and isinstance(rag_context, dict):
+                elements.append(Paragraph('Knowledge Base Context', styles['Heading2']))
+                if rag_context.get('documents_used'):
+                    elements.append(Paragraph('<b>Documents Used:</b>', styles['Normal']))
+                    for doc in rag_context['documents_used']:
+                        elements.append(Paragraph(f"• {doc}", styles['Normal']))
+                if rag_context.get('most_relevant_chunks'):
+                    elements.append(Paragraph('<b>Relevant Information:</b>', styles['Normal']))
+                    for chunk in rag_context['most_relevant_chunks']:
+                        elements.append(Paragraph(f"• {chunk}", styles['Normal']))
+                if rag_context.get('retrieval_confidence'):
+                    elements.append(Paragraph(f"<b>Retrieval Confidence:</b> {rag_context['retrieval_confidence']}", styles['Normal']))
+                elements.append(Spacer(1, 0.2*inch))
+
+            # Memory Context
+            memory_context = incident.get('memory_context')
+            if memory_context and isinstance(memory_context, dict):
+                elements.append(Paragraph('Historical Context', styles['Heading2']))
+                if memory_context.get('similar_past_incidents'):
+                    elements.append(Paragraph('<b>Similar Past Incidents:</b>', styles['Normal']))
+                    for incident_ref in memory_context['similar_past_incidents']:
+                        elements.append(Paragraph(f"• {incident_ref}", styles['Normal']))
+                if memory_context.get('previous_recommendations'):
+                    elements.append(Paragraph('<b>Previous Recommendations:</b>', styles['Normal']))
+                    for rec in memory_context['previous_recommendations']:
+                        elements.append(Paragraph(f"• {rec}", styles['Normal']))
+                elements.append(Spacer(1, 0.2*inch))
+
             # Generated info
             elements.append(Spacer(1, 0.3*inch))
             gen_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
