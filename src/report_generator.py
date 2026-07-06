@@ -39,6 +39,9 @@ class ReportGenerator:
         Returns:
             Dictionary with 'data' (bytes), 'filename', 'content_type'
         """
+        # Reload memory to ensure we have latest incident data
+        self.memory_manager.long_term = self.memory_manager._load_long_term()
+
         # Get incident from memory
         incidents = self.memory_manager.long_term.get('incidents', [])
         incident = None
@@ -64,22 +67,29 @@ class ReportGenerator:
             return None
 
     def _generate_pdf(self, incident: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate PDF report."""
+        """Generate PDF report with ALL comprehensive data."""
         try:
             from io import BytesIO
+            import json
 
             buffer = BytesIO()
             doc = SimpleDocTemplate(
                 buffer,
                 pagesize=letter,
-                rightMargin=0.75*inch,
-                leftMargin=0.75*inch,
-                topMargin=0.75*inch,
-                bottomMargin=0.75*inch
+                rightMargin=0.5*inch,
+                leftMargin=0.5*inch,
+                topMargin=0.5*inch,
+                bottomMargin=0.5*inch
             )
 
             elements = []
             styles = getSampleStyleSheet()
+
+            # Use smaller fonts to fit more content
+            heading_style = styles['Heading2']
+            heading_style.fontSize = 11
+            normal_style = styles['Normal']
+            normal_style.fontSize = 9
 
             # Title
             title_style = ParagraphStyle(
@@ -167,8 +177,8 @@ class ReportGenerator:
                 real_docs = [d for d in retrieved_docs if d and str(d).strip() and str(d) not in ['N/A', 'Unknown']]
                 if real_docs:
                     elements.append(Paragraph('Evidence Retrieved', styles['Heading2']))
-                    for doc in real_docs:
-                        elements.append(Paragraph(f"• {doc}", styles['Normal']))
+                    for evidence_doc in real_docs:
+                        elements.append(Paragraph(f"• {evidence_doc}", styles['Normal']))
                     elements.append(Spacer(1, 0.2*inch))
 
             # Immediate Actions
@@ -239,8 +249,8 @@ class ReportGenerator:
                         elements.append(Paragraph(f"• {evidence}", styles['Normal']))
                 if source_analysis.get('retrieved_documents'):
                     elements.append(Paragraph('<b>Retrieved Documents:</b>', styles['Normal']))
-                    for doc in source_analysis['retrieved_documents']:
-                        elements.append(Paragraph(f"• {doc}", styles['Normal']))
+                    for retrieved_doc in source_analysis['retrieved_documents']:
+                        elements.append(Paragraph(f"• {retrieved_doc}", styles['Normal']))
                 if source_analysis.get('memory_references'):
                     elements.append(Paragraph('<b>Memory References:</b>', styles['Normal']))
                     for ref in source_analysis['memory_references']:
@@ -267,8 +277,8 @@ class ReportGenerator:
                 elements.append(Paragraph('Knowledge Base Context', styles['Heading2']))
                 if rag_context.get('documents_used'):
                     elements.append(Paragraph('<b>Documents Used:</b>', styles['Normal']))
-                    for doc in rag_context['documents_used']:
-                        elements.append(Paragraph(f"• {doc}", styles['Normal']))
+                    for rag_doc in rag_context['documents_used']:
+                        elements.append(Paragraph(f"• {rag_doc}", styles['Normal']))
                 if rag_context.get('most_relevant_chunks'):
                     elements.append(Paragraph('<b>Relevant Information:</b>', styles['Normal']))
                     for chunk in rag_context['most_relevant_chunks']:
@@ -290,6 +300,41 @@ class ReportGenerator:
                     for rec in memory_context['previous_recommendations']:
                         elements.append(Paragraph(f"• {rec}", styles['Normal']))
                 elements.append(Spacer(1, 0.2*inch))
+
+            # Comprehensive Data Dump (all fields as structured text)
+            elements.append(PageBreak())
+            elements.append(Paragraph('Comprehensive Data (All Fields)', styles['Heading2']))
+            elements.append(Paragraph('<b>This section contains all incident data in structured format.</b>', styles['Normal']))
+            elements.append(Spacer(1, 0.1*inch))
+
+            # Create a human-readable data dump
+            data_sections = [
+                ('Metadata', incident.get('metadata', {})),
+                ('Events by Severity', incident.get('events_by_severity', {})),
+                ('Timeline', incident.get('timeline', [])),
+                ('Source Analysis', incident.get('source_analysis', {})),
+                ('Root Cause Analysis', incident.get('root_cause_analysis', {})),
+                ('RAG Context', incident.get('rag_context', {})),
+                ('Memory Context', incident.get('memory_context', {})),
+                ('Recommendations', incident.get('recommendations', [])),
+                ('Next Steps', incident.get('next_steps', []))
+            ]
+
+            for section_title, section_data in data_sections:
+                if section_data:
+                    elements.append(Paragraph(f'<b>{section_title}:</b>', styles['Normal']))
+                    try:
+                        # Format as readable JSON
+                        data_str = json.dumps(section_data, indent=2)
+                        # Use monospace for readability
+                        for line in data_str.split('\n')[:20]:  # Limit lines to prevent overflow
+                            if line.strip():
+                                elements.append(Paragraph(f'<font face="Courier" size="8">{line}</font>', styles['Normal']))
+                        if len(data_str.split('\n')) > 20:
+                            elements.append(Paragraph('<font face="Courier" size="8">... (truncated)</font>', styles['Normal']))
+                    except:
+                        elements.append(Paragraph(f'{section_data}', styles['Normal']))
+                    elements.append(Spacer(1, 0.1*inch))
 
             # Generated info
             elements.append(Spacer(1, 0.3*inch))

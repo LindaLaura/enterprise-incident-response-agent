@@ -106,8 +106,8 @@ class AgentManager:
             'parsed_info': self.context.get('parsed_info'),
             'retrieved_docs': self.context.get('retrieved_docs'),
             'memory_info': self.context.get('memory_info'),
-            'root_cause': self.context.get('root_cause'),
-            'recommendations': self.context.get('recommendations')
+            'root_cause': final_report.get('root_cause') or self.context.get('root_cause'),
+            'recommendations': final_report.get('recommendations') or self.context.get('recommendations')
         }
 
         logger.info("🎉 Analysis complete!")

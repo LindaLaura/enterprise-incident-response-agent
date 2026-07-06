@@ -345,7 +345,7 @@ async def analyze_incident(user_input: str) -> dict:
                     retrieved_docs=retrieved_docs,
                     technical_impact=root_cause_data.get('contributing_factors', []),
                     business_impact=final_report.get('business_impact', final_report.get('summary', 'N/A')),
-                    confidence=final_report.get('confidence', confidence),
+                    confidence=final_report.get('confidence', 0),
                     affected_users=final_report.get('affected_users', 'N/A'),
                     duration=final_report.get('duration', 'N/A'),
                     timeline=final_report.get('timeline', []),
@@ -379,6 +379,9 @@ async def analyze_incident(user_input: str) -> dict:
 @app.get("/api/incidents")
 async def get_incidents(limit: int = 10):
     """Get recent incidents from memory."""
+    # Reload memory to ensure we have the latest data
+    memory_manager.long_term = memory_manager._load_long_term()
+
     incidents = memory_manager.long_term['incidents'][-limit:]
     return {
         "total": memory_manager.long_term['metadata']['total_incidents'],
@@ -500,19 +503,33 @@ async def get_latest_incident():
     elif not affected_services and 'order' in latest.get('summary', '').lower():
         affected_services = ['Order Service', 'Payment Service']
 
-    # Extract evidence from incident
+    # Extract evidence from incident (try multiple sources)
     evidence = []
-    if latest.get('retrieved_docs'):
-        retrieved_docs = latest.get('retrieved_docs')
-        if isinstance(retrieved_docs, list):
-            for idx, doc in enumerate(retrieved_docs[:3]):
-                evidence.append({
-                    "id": f"doc_{idx}",
-                    "name": str(doc)[:60] if isinstance(doc, str) else str(doc),
-                    "relevance": 85 + (10 - idx*2),
-                    "meta": "Retrieved from knowledge base",
-                    "type": "document"
-                })
+
+    # Try retrieved_docs first
+    retrieved_docs = latest.get('retrieved_docs')
+    if not retrieved_docs:
+        # Try rag_context.documents_used
+        rag_context = latest.get('rag_context', {})
+        if rag_context and isinstance(rag_context, dict):
+            retrieved_docs = rag_context.get('documents_used', [])
+
+    if not retrieved_docs:
+        # Try source_analysis.retrieved_documents
+        source_analysis = latest.get('source_analysis', {})
+        if source_analysis and isinstance(source_analysis, dict):
+            retrieved_docs = source_analysis.get('retrieved_documents', [])
+
+    # Build evidence list from retrieved docs
+    if retrieved_docs and isinstance(retrieved_docs, list):
+        for idx, doc in enumerate(retrieved_docs[:3]):
+            evidence.append({
+                "id": f"doc_{idx}",
+                "name": str(doc)[:60] if isinstance(doc, str) else str(doc),
+                "relevance": 95 - (idx * 5),  # Decrease relevance by 5% for each item
+                "meta": "Retrieved from knowledge base",
+                "type": "document"
+            })
 
     return {
         "incident_id": latest.get('incident_id', f"INC-{len(incidents):04d}"),
@@ -681,6 +698,13 @@ async def analyze_logs(logs_data: dict = Body(...)):
             memory_info=memory_info
         )
 
+        # Extract root_cause as string (handle both dict and string types)
+        root_cause_str = final_report.get('root_cause', 'Unknown')
+        if isinstance(root_cause_str, dict):
+            root_cause_str = root_cause_str.get('primary_cause', 'Unknown')
+        if not root_cause_str:
+            root_cause_str = root_cause_analysis.get('primary_cause', 'Unknown')
+
         return {
             "status": "success",
             "confidence": confidence,
@@ -688,7 +712,7 @@ async def analyze_logs(logs_data: dict = Body(...)):
             "status_text": final_report.get('status', 'Investigating'),
             "affected_users": final_report.get('affected_users', 'Unknown'),
             "duration": final_report.get('duration', 'Unknown'),
-            "primary_cause": final_report.get('root_cause', root_cause_analysis.get('primary_cause', 'Unknown')),
+            "primary_cause": root_cause_str,
             "business_impact": final_report.get('summary', 'Analysis completed'),
             "technical_impact": ', '.join(root_cause_analysis.get('contributing_factors', [])) if root_cause_analysis.get('contributing_factors') else 'See root cause',
             "affected_services": root_cause_analysis.get('affected_systems', []),
@@ -710,7 +734,7 @@ async def analyze_logs(logs_data: dict = Body(...)):
             "timeline": final_report.get('timeline'),
             "next_steps": final_report.get('next_steps') or final_report.get('recommendations', {}).get('long_term_improvements', []),
             "metadata": final_report.get('metadata'),
-            "root_cause": final_report.get('root_cause', 'Unknown'),
+            "root_cause": root_cause_str,
             "status": final_report.get('status', 'Analyzed')
         }
 
@@ -739,31 +763,47 @@ async def generate_report(report_request: dict = Body(...)):
             raise ValueError(f"Unsupported format: {format}")
 
         # If incident_data is provided, save it to memory first (for Analyze Incident page)
+        # Only save if this incident doesn't already exist in memory
         if incident_data:
             try:
-                memory_manager.save_incident(
-                    incident_id=incident_id,
-                    summary=incident_data.get('summary', incident_data.get('incident_summary', 'Analysis completed')),
-                    root_cause=incident_data.get('root_cause', 'Unknown'),
-                    recommendations=incident_data.get('recommendations', [incident_data.get('immediate_action', 'No actions')]) if isinstance(incident_data.get('recommendations'), list) else [incident_data.get('immediate_action', 'No actions')],
-                    severity=incident_data.get('severity', 'MEDIUM'),
-                    affected_services=incident_data.get('affected_services', []),
-                    affected_users=incident_data.get('affected_users', 'N/A'),
-                    duration=incident_data.get('duration', 'N/A'),
-                    timeline=incident_data.get('timeline', []),
-                    confidence=incident_data.get('confidence', 0),
-                    business_impact=incident_data.get('business_impact', 'N/A'),
-                    events_by_severity=incident_data.get('events_by_severity'),
-                    incident_timestamp=incident_data.get('incident_timestamp'),
-                    incident_summary=incident_data.get('incident_summary'),
-                    source_analysis=incident_data.get('source_analysis'),
-                    rag_context=incident_data.get('rag_context'),
-                    memory_context=incident_data.get('memory_context'),
-                    root_cause_analysis=incident_data.get('root_cause_analysis'),
-                    metadata=incident_data.get('metadata'),
-                    status=incident_data.get('status')
-                )
-                logger.info(f"✅ Saved incident {incident_id} to memory for reporting")
+                # Check if incident already exists
+                memory_manager.long_term = memory_manager._load_long_term()
+                existing_incident = any(inc.get('incident_id') == incident_id for inc in memory_manager.long_term.get('incidents', []))
+
+                if not existing_incident:
+                    # Extract root_cause as string (handle both dict and string types)
+                    root_cause_val = incident_data.get('root_cause', 'Unknown')
+                    if isinstance(root_cause_val, dict):
+                        root_cause_val = root_cause_val.get('primary_cause', 'Unknown')
+                    if not root_cause_val:
+                        root_cause_val = 'Unknown'
+
+                    memory_manager.save_incident(
+                        incident_id=incident_id,
+                        summary=incident_data.get('summary', incident_data.get('incident_summary', 'Analysis completed')),
+                        root_cause=root_cause_val,
+                        recommendations=incident_data.get('recommendations', [incident_data.get('immediate_action', 'No actions')]) if isinstance(incident_data.get('recommendations'), list) else [incident_data.get('immediate_action', 'No actions')],
+                        severity=incident_data.get('severity', 'MEDIUM'),
+                        affected_services=incident_data.get('affected_services', []),
+                        affected_users=incident_data.get('affected_users', 'N/A'),
+                        duration=incident_data.get('duration', 'N/A'),
+                        timeline=incident_data.get('timeline', []),
+                        confidence=incident_data.get('confidence', 0),
+                        business_impact=incident_data.get('business_impact', 'N/A'),
+                        events_by_severity=incident_data.get('events_by_severity'),
+                        incident_timestamp=incident_data.get('incident_timestamp'),
+                        incident_summary=incident_data.get('incident_summary'),
+                        source_analysis=incident_data.get('source_analysis'),
+                        rag_context=incident_data.get('rag_context'),
+                        memory_context=incident_data.get('memory_context'),
+                        root_cause_analysis=incident_data.get('root_cause_analysis'),
+                        metadata=incident_data.get('metadata'),
+                        status=incident_data.get('status'),
+                        next_steps=incident_data.get('next_steps')
+                    )
+                    logger.info(f"✅ Saved incident {incident_id} to memory for reporting")
+                else:
+                    logger.info(f"ℹ️ Incident {incident_id} already exists in memory")
             except Exception as save_error:
                 logger.warning(f"⚠️ Could not save incident to memory: {save_error}")
 
@@ -781,7 +821,15 @@ async def generate_report(report_request: dict = Body(...)):
 
         # Get the report_id from memory (it was saved during save_report_file)
         reports = memory_manager.get_reports_by_incident(incident_id)
-        report_id = reports[-1]['id'] if reports else f"{incident_id}_{format}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        # Find the report we just created by matching format and file_path
+        report_id = None
+        for report in reversed(reports):  # Check newest first
+            if report.get('format') == format and report.get('file_path') == file_path:
+                report_id = report.get('id')
+                break
+        if not report_id:
+            # Fallback: use the last report (shouldn't happen)
+            report_id = reports[-1]['id'] if reports else f"{incident_id}_{format}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
         return {
             "status": "success",
