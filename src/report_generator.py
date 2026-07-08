@@ -320,21 +320,24 @@ class ReportGenerator:
                 ('Next Steps', incident.get('next_steps', []))
             ]
 
+            sections_added = 0
             for section_title, section_data in data_sections:
                 if section_data:
                     elements.append(Paragraph(f'<b>{section_title}:</b>', styles['Normal']))
                     try:
                         # Format as readable JSON
                         data_str = json.dumps(section_data, indent=2)
-                        # Use monospace for readability
-                        for line in data_str.split('\n')[:20]:  # Limit lines to prevent overflow
+                        # Use monospace for readability - show more lines now
+                        lines = data_str.split('\n')
+                        for line in lines[:40]:  # Show up to 40 lines per section
                             if line.strip():
-                                elements.append(Paragraph(f'<font face="Courier" size="8">{line}</font>', styles['Normal']))
-                        if len(data_str.split('\n')) > 20:
-                            elements.append(Paragraph('<font face="Courier" size="8">... (truncated)</font>', styles['Normal']))
-                    except:
+                                elements.append(Paragraph(f'<font face="Courier" size="7">{line}</font>', styles['Normal']))
+                        if len(lines) > 40:
+                            elements.append(Paragraph('<font face="Courier" size="7">... (truncated)</font>', styles['Normal']))
+                    except Exception as e:
                         elements.append(Paragraph(f'{section_data}', styles['Normal']))
                     elements.append(Spacer(1, 0.1*inch))
+                    sections_added += 1
 
             # Generated info
             elements.append(Spacer(1, 0.3*inch))

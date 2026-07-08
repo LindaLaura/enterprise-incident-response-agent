@@ -4,10 +4,15 @@ Concrete agent implementations for incident response pipeline.
 
 import asyncio
 import logging
+import os
 from typing import Any, Dict, List
 from .base import Agent
 
 logger = logging.getLogger(__name__)
+
+# Evaluation framework flags
+ENABLE_RAGAS = os.getenv("ENABLE_RAGAS", "false").lower() == "true"
+ENABLE_DEEPEVAL = os.getenv("ENABLE_DEEPEVAL", "false").lower() == "true"
 
 
 class ParserAgent(Agent):
@@ -98,6 +103,26 @@ class RetrieverAgent(Agent):
             'top_results': results,
             'query_used': query[:50]
         }
+
+        # RAGAS Evaluation: Assess RAG quality
+        if ENABLE_RAGAS:
+            try:
+                from ..evaluation import RAGASEvaluator
+                evaluator = RAGASEvaluator()
+                ragas_result = evaluator.evaluate_full_pipeline(
+                    query=query,
+                    retrieved_docs=[results] if results else [],
+                    answer=results,
+                    incident_id=context.get('incident_id', 'unknown')
+                )
+                retrieved['ragas_evaluation'] = {
+                    'context_precision': ragas_result['retrieval_metrics'].get('context_precision', 0),
+                    'context_recall': ragas_result['retrieval_metrics'].get('context_recall', 0),
+                    'aggregate_score': ragas_result.get('aggregate_score', 0)
+                }
+                logger.info(f"📊 RAGAS Evaluation: {retrieved['ragas_evaluation']['aggregate_score']:.2f}")
+            except Exception as e:
+                logger.warning(f"⚠️ RAGAS evaluation failed: {e}")
 
         logger.info(f"✅ Retriever Agent: Found {docs_found} relevant documents")
         return retrieved
@@ -197,6 +222,29 @@ class ReasoningAgent(Agent):
             except Exception as e:
                 logger.warning(f"LLM analysis failed: {e}")
 
+        # DeepEval Evaluation: Assess root cause quality
+        if ENABLE_DEEPEVAL:
+            try:
+                from ..evaluation import DeepEvalEvaluator
+                evaluator = DeepEvalEvaluator()
+                retrieved_context = []
+                if context.get('retrieved_docs'):
+                    retrieved_context = [context['retrieved_docs'].get('top_results', '')]
+
+                deepeval_result = evaluator.evaluate_root_cause(
+                    root_cause=analysis.get('primary_cause', ''),
+                    retrieved_context=retrieved_context,
+                    incident_id=context.get('incident_id', 'unknown')
+                )
+                analysis['deepeval_evaluation'] = {
+                    'faithfulness': deepeval_result.get('faithfulness', 0),
+                    'hallucination_score': deepeval_result.get('hallucination_score', 0),
+                    'aggregate_score': deepeval_result.get('aggregate_score', 0)
+                }
+                logger.info(f"📊 DeepEval Root Cause Quality: {analysis['deepeval_evaluation']['aggregate_score']:.2f}")
+            except Exception as e:
+                logger.warning(f"⚠️ DeepEval evaluation failed: {e}")
+
         logger.info(f"✅ Reasoning Agent: Root cause identified with {analysis['confidence']}% confidence")
         return analysis
 
@@ -260,6 +308,30 @@ class RecommendationAgent(Agent):
             except Exception as e:
                 logger.warning(f"Recommendation generation failed: {e}")
 
+        # DeepEval Evaluation: Assess recommendation quality
+        if ENABLE_DEEPEVAL:
+            try:
+                from ..evaluation import DeepEvalEvaluator
+                evaluator = DeepEvalEvaluator()
+                all_recs = (
+                    recommendations.get('immediate_actions', []) +
+                    recommendations.get('short_term_fixes', []) +
+                    recommendations.get('long_term_solutions', [])
+                )
+                deepeval_result = evaluator.evaluate_recommendations(
+                    recommendations=all_recs,
+                    incident_id=context.get('incident_id', 'unknown'),
+                    context=str(root_cause)
+                )
+                recommendations['deepeval_evaluation'] = {
+                    'average_actionability': deepeval_result.get('average_actionability', 0),
+                    'average_relevancy': deepeval_result.get('average_relevancy', 0),
+                    'aggregate_score': deepeval_result.get('aggregate_score', 0)
+                }
+                logger.info(f"📊 DeepEval Recommendations Quality: {recommendations['deepeval_evaluation']['aggregate_score']:.2f}")
+            except Exception as e:
+                logger.warning(f"⚠️ DeepEval evaluation failed: {e}")
+
         logger.info(f"✅ Recommendation Agent: Generated {len(recommendations['immediate_actions'])} immediate actions")
         return recommendations
 
@@ -291,33 +363,35 @@ class ReporterAgent(Agent):
         memory_info = context.get('memory_info', {})
         parsed_info = context.get('parsed_info', {})
 
+        # Handle case where root_cause is a string instead of dict
+        if isinstance(root_cause_data, str):
+            root_cause_data = {'primary_cause': root_cause_data, 'severity': 'High', 'confidence': 'MEDIUM'}
+
         # Build comprehensive report with all generated data
         report = {
             'incident_id': f'INC-{int(__import__("time").time())}',
             'incident_timestamp': f"{__import__('datetime').datetime.now().isoformat()}Z",
-            'severity': root_cause_data.get('severity', 'High').upper(),
-            'status': 'RESOLVED',
-            'summary': 'Database connection pool exhaustion causing order service outage',
-            'incident_summary': 'Database connection pool exhaustion caused by connection leak (85 stale connections open >5 minutes) led to cascading failure across services',
+            'severity': root_cause_data.get('severity', 'High').upper() if isinstance(root_cause_data, dict) else 'High',
+            'status': 'INVESTIGATING',
+            'summary': root_cause_data.get('primary_cause', 'Incident analysis completed') if isinstance(root_cause_data, dict) else str(root_cause_data),
+            'incident_summary': root_cause_data.get('primary_cause', 'Incident summary') if isinstance(root_cause_data, dict) else str(root_cause_data),
 
             # Root cause analysis with evidence
-            'root_cause': root_cause_data.get('primary_cause', 'Unknown'),
+            'root_cause': root_cause_data.get('primary_cause', 'Unknown') if isinstance(root_cause_data, dict) else str(root_cause_data),
             'root_cause_analysis': {
-                'primary_cause': root_cause_data.get('primary_cause', 'Unknown'),
-                'confidence_level': 'HIGH',
+                'primary_cause': root_cause_data.get('primary_cause', 'Unknown') if isinstance(root_cause_data, dict) else str(root_cause_data),
+                'confidence_level': root_cause_data.get('confidence', 'MEDIUM') if isinstance(root_cause_data, dict) else 'MEDIUM',
                 'supporting_evidence': [
-                    '[LOGS] Connection pool exhausted - initial detection',
-                    '[LOGS] Failed to acquire connection after 30s timeout',
-                    '[LOGS] Max connections limit reached',
-                    '[DOCS] Retrieved relevant configuration guidance',
-                    '[MEMORY] Similar incidents found in history'
+                    '[LOGS] Key patterns detected in error logs',
+                    '[ANALYSIS] Root cause identified through comprehensive analysis',
+                    '[CONTEXT] Similar patterns found in historical data'
                 ]
             },
 
             # Affected resources
-            'affected_services': root_cause_data.get('affected_systems', []),
-            'affected_users': '~5,000 users',
-            'duration': '15 minutes',
+            'affected_services': root_cause_data.get('affected_systems', []) if isinstance(root_cause_data, dict) else [],
+            'affected_users': 'Unknown',
+            'duration': 'Unknown',
 
             # Events organized by severity
             'events_by_severity': {
@@ -412,6 +486,24 @@ class ReporterAgent(Agent):
                 'generated_at': __import__('datetime').datetime.now().isoformat()
             }
         }
+
+        # DeepEval Evaluation: Assess report quality
+        if ENABLE_DEEPEVAL:
+            try:
+                from ..evaluation import DeepEvalEvaluator
+                evaluator = DeepEvalEvaluator()
+                deepeval_result = evaluator.evaluate_report(
+                    report=report,
+                    incident_id=report.get('incident_id', 'unknown')
+                )
+                report['deepeval_evaluation'] = {
+                    'comprehensiveness': deepeval_result.get('comprehensiveness', 0),
+                    'summary_relevancy': deepeval_result.get('summary_relevancy', 0),
+                    'aggregate_score': deepeval_result.get('aggregate_score', 0)
+                }
+                logger.info(f"📊 DeepEval Report Quality: {report['deepeval_evaluation']['aggregate_score']:.2f}")
+            except Exception as e:
+                logger.warning(f"⚠️ DeepEval evaluation failed: {e}")
 
         logger.info(f"✅ Reporter Agent: Comprehensive report generated with {len(report)} fields")
         return report

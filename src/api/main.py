@@ -31,6 +31,13 @@ from ..openai_client import OpenAIClient
 from ..agents.manager import AgentManager
 from ..report_generator import ReportGenerator
 from ..langsmith_config import trace_function, LANGSMITH_ENABLED
+from ..services.analysis_service import AnalysisService
+from ..evaluation.evaluation_orchestrator import EvaluationOrchestrator
+from ..langsmith_integration import (
+    LangSmithDatasetTracker,
+    LangSmithEvaluationExporter,
+    setup_langsmith_evaluation_pipeline
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -68,6 +75,34 @@ agent_manager = AgentManager(rag_retriever, memory_manager, llm_client)
 
 # Global report generator
 report_generator = ReportGenerator(memory_manager)
+
+# Global analysis service (LangGraph + Evaluators)
+try:
+    analysis_service = AnalysisService(rag_retriever, memory_manager, llm_client)
+    logger.info("✅ Analysis service initialized (LangGraph + Evaluators)")
+except Exception as e:
+    logger.warning(f"⚠️ Analysis service initialization failed: {e}")
+    analysis_service = None
+
+# Global evaluation orchestrator
+try:
+    evaluation_orchestrator = EvaluationOrchestrator()
+    logger.info("✅ Evaluation orchestrator initialized")
+except Exception as e:
+    logger.warning(f"⚠️ Evaluation orchestrator initialization failed: {e}")
+    evaluation_orchestrator = None
+
+# Global LangSmith integration
+try:
+    langsmith_tracker = LangSmithDatasetTracker()
+    langsmith_exporter = LangSmithEvaluationExporter(langsmith_tracker)
+    # Set up datasets
+    setup_langsmith_evaluation_pipeline()
+    logger.info("✅ LangSmith integration initialized")
+except Exception as e:
+    logger.warning(f"⚠️ LangSmith integration failed: {e}")
+    langsmith_tracker = None
+    langsmith_exporter = None
 
 # Global analysis progress state (in-memory, would use Redis in production)
 analysis_progress = {
@@ -705,6 +740,25 @@ async def analyze_logs(logs_data: dict = Body(...)):
         if not root_cause_str:
             root_cause_str = root_cause_analysis.get('primary_cause', 'Unknown')
 
+        # Collect evaluation metrics from agents
+        evaluation_metrics = {}
+
+        # Collect RAGAS metrics from retriever
+        if retrieved_docs and isinstance(retrieved_docs, dict) and 'ragas_evaluation' in retrieved_docs:
+            evaluation_metrics['ragas'] = retrieved_docs['ragas_evaluation']
+
+        # Collect DeepEval metrics from reasoning agent
+        if root_cause_analysis and isinstance(root_cause_analysis, dict) and 'deepeval_evaluation' in root_cause_analysis:
+            evaluation_metrics['deepeval_root_cause'] = root_cause_analysis['deepeval_evaluation']
+
+        # Collect DeepEval metrics from recommendations
+        if recommendations and isinstance(recommendations, dict) and 'deepeval_evaluation' in recommendations:
+            evaluation_metrics['deepeval_recommendations'] = recommendations['deepeval_evaluation']
+
+        # Collect DeepEval metrics from report
+        if final_report and isinstance(final_report, dict) and 'deepeval_evaluation' in final_report:
+            evaluation_metrics['deepeval_report'] = final_report['deepeval_evaluation']
+
         return {
             "status": "success",
             "confidence": confidence,
@@ -735,7 +789,9 @@ async def analyze_logs(logs_data: dict = Body(...)):
             "next_steps": final_report.get('next_steps') or final_report.get('recommendations', {}).get('long_term_improvements', []),
             "metadata": final_report.get('metadata'),
             "root_cause": root_cause_str,
-            "status": final_report.get('status', 'Analyzed')
+            "status": final_report.get('status', 'Analyzed'),
+            # ✅ NEW: Evaluation Framework Metrics
+            "evaluation_metrics": evaluation_metrics
         }
 
     except Exception as e:
@@ -989,6 +1045,500 @@ def _extract_immediate_actions(recommendations: dict) -> str:
                 return '. '.join([f"{i+1}. {str(s)}" for i, s in enumerate(steps)])
 
     return "No immediate actions specified"
+
+
+# ============================================================================
+# EVALUATION METRICS ENDPOINTS (RAGAS, DeepEval, LangGraph)
+# ============================================================================
+
+@app.get("/api/metrics/ragas")
+async def get_ragas_metrics(last_n: int = 10):
+    """Get RAGAS (RAG evaluation) metrics summary."""
+    try:
+        from ..evaluation import RAGASEvaluator
+        evaluator = RAGASEvaluator()
+        summary = evaluator.get_metrics_summary(last_n=last_n)
+        return {
+            "status": "success",
+            "framework": "RAGAS",
+            "data": summary
+        }
+    except Exception as e:
+        logger.error(f"❌ RAGAS metrics error: {e}")
+        return {
+            "status": "error",
+            "framework": "RAGAS",
+            "message": str(e),
+            "data": {}
+        }
+
+
+@app.get("/api/metrics/deepeval")
+async def get_deepeval_metrics(last_n: int = 10):
+    """Get DeepEval (LLM output evaluation) metrics summary."""
+    try:
+        from ..evaluation import DeepEvalEvaluator
+        evaluator = DeepEvalEvaluator()
+        summary = evaluator.get_metrics_summary(last_n=last_n)
+        return {
+            "status": "success",
+            "framework": "DeepEval",
+            "data": summary
+        }
+    except Exception as e:
+        logger.error(f"❌ DeepEval metrics error: {e}")
+        return {
+            "status": "error",
+            "framework": "DeepEval",
+            "message": str(e),
+            "data": {}
+        }
+
+
+@app.get("/api/metrics/ragas/history")
+async def get_ragas_history():
+    """Get full RAGAS evaluation history."""
+    try:
+        from ..evaluation import RAGASEvaluator
+        evaluator = RAGASEvaluator()
+        return {
+            "status": "success",
+            "framework": "RAGAS",
+            "total": len(evaluator.metrics_history),
+            "data": evaluator.metrics_history
+        }
+    except Exception as e:
+        logger.error(f"❌ RAGAS history error: {e}")
+        return {
+            "status": "error",
+            "framework": "RAGAS",
+            "message": str(e),
+            "data": []
+        }
+
+
+@app.get("/api/metrics/deepeval/history")
+async def get_deepeval_history():
+    """Get full DeepEval evaluation history."""
+    try:
+        from ..evaluation import DeepEvalEvaluator
+        evaluator = DeepEvalEvaluator()
+        return {
+            "status": "success",
+            "framework": "DeepEval",
+            "total": len(evaluator.metrics_history),
+            "data": evaluator.metrics_history
+        }
+    except Exception as e:
+        logger.error(f"❌ DeepEval history error: {e}")
+        return {
+            "status": "error",
+            "framework": "DeepEval",
+            "message": str(e),
+            "data": []
+        }
+
+
+@app.get("/api/metrics/all")
+async def get_all_metrics():
+    """Get all evaluation metrics from all frameworks."""
+    try:
+        from ..evaluation import RAGASEvaluator, DeepEvalEvaluator
+
+        ragas_eval = RAGASEvaluator()
+        deepeval_eval = DeepEvalEvaluator()
+
+        return {
+            "status": "success",
+            "timestamp": datetime.now().isoformat(),
+            "frameworks": {
+                "ragas": {
+                    "enabled": os.getenv("ENABLE_RAGAS", "false").lower() == "true",
+                    "summary": ragas_eval.get_metrics_summary(last_n=10),
+                    "total_evaluations": len(ragas_eval.metrics_history)
+                },
+                "deepeval": {
+                    "enabled": os.getenv("ENABLE_DEEPEVAL", "false").lower() == "true",
+                    "summary": deepeval_eval.get_metrics_summary(last_n=10),
+                    "total_evaluations": len(deepeval_eval.metrics_history)
+                },
+                "langgraph": {
+                    "enabled": os.getenv("USE_LANGGRAPH", "false").lower() == "true",
+                    "status": "available"
+                }
+            }
+        }
+    except Exception as e:
+        logger.error(f"❌ All metrics error: {e}")
+        return {
+            "status": "error",
+            "message": str(e),
+            "frameworks": {}
+        }
+
+
+# ============================================================================
+# UNIFIED ANALYSIS ENDPOINTS (LangGraph + Evaluation Orchestrator)
+# ============================================================================
+
+@app.post("/api/analysis/run")
+async def run_analysis(request: dict = Body(...)):
+    """
+    Run complete incident analysis with LangGraph orchestration and evaluation.
+
+    Supports both LangGraph-based orchestration and traditional agent pipeline.
+    """
+    try:
+        logs = request.get("logs", "")
+        incident_id = request.get("incident_id") or f"INC-{int(datetime.now().timestamp())}"
+        use_langgraph = request.get("use_langgraph", True)
+
+        if not logs:
+            raise ValueError("No logs provided")
+
+        if not analysis_service:
+            raise RuntimeError("Analysis service not available")
+
+        logger.info(f"🚀 Running analysis for {incident_id} (use_langgraph={use_langgraph})")
+
+        # Run analysis with evaluation
+        result = await analysis_service.run_analysis(
+            logs=logs,
+            incident_id=incident_id,
+            use_langgraph=use_langgraph
+        )
+
+        return {
+            "status": "success",
+            "incident_id": incident_id,
+            "analysis": result,
+            "timestamp": datetime.now().isoformat()
+        }
+
+    except Exception as e:
+        logger.error(f"❌ Analysis error: {e}")
+        return {
+            "status": "error",
+            "incident_id": request.get("incident_id", "unknown"),
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
+
+
+@app.get("/api/analysis/{incident_id}/status")
+async def get_analysis_status(incident_id: str):
+    """Get status of an incident analysis."""
+    try:
+        if not analysis_service:
+            raise RuntimeError("Analysis service not available")
+
+        status = analysis_service.get_analysis_status(incident_id)
+        return {
+            "status": "success",
+            "data": status
+        }
+    except Exception as e:
+        logger.error(f"❌ Status error: {e}")
+        return {
+            "status": "error",
+            "incident_id": incident_id,
+            "error": str(e)
+        }
+
+
+@app.get("/api/analysis/{incident_id}/result")
+async def get_analysis_result(incident_id: str):
+    """Get complete analysis result for an incident."""
+    try:
+        if not analysis_service:
+            raise RuntimeError("Analysis service not available")
+
+        result = analysis_service.get_analysis_result(incident_id)
+        return {
+            "status": "success",
+            "data": result
+        }
+    except Exception as e:
+        logger.error(f"❌ Result error: {e}")
+        return {
+            "status": "error",
+            "incident_id": incident_id,
+            "error": str(e)
+        }
+
+
+@app.get("/api/analysis/list")
+async def list_analyses(limit: int = 10):
+    """List recent analyses."""
+    try:
+        if not analysis_service:
+            raise RuntimeError("Analysis service not available")
+
+        analyses = analysis_service.list_analyses(limit=limit)
+        return {
+            "status": "success",
+            "count": len(analyses),
+            "data": analyses
+        }
+    except Exception as e:
+        logger.error(f"❌ List error: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+# ============================================================================
+# EVALUATION ORCHESTRATOR ENDPOINTS
+# ============================================================================
+
+@app.get("/api/evaluation/incident/{incident_id}")
+async def get_incident_evaluation(incident_id: str):
+    """Get aggregated evaluation for an incident."""
+    try:
+        if not evaluation_orchestrator:
+            raise RuntimeError("Evaluation orchestrator not available")
+
+        evaluation = evaluation_orchestrator.get_incident_evaluation(incident_id)
+        return {
+            "status": "success",
+            "data": evaluation
+        }
+    except Exception as e:
+        logger.error(f"❌ Evaluation error: {e}")
+        return {
+            "status": "error",
+            "incident_id": incident_id,
+            "error": str(e)
+        }
+
+
+@app.get("/api/evaluation/summary")
+async def get_evaluation_summary(last_n: int = 10):
+    """Get summary of recent evaluations across all incidents."""
+    try:
+        if not evaluation_orchestrator:
+            raise RuntimeError("Evaluation orchestrator not available")
+
+        summary = evaluation_orchestrator.get_metrics_summary(last_n=last_n)
+        return {
+            "status": "success",
+            "data": summary
+        }
+    except Exception as e:
+        logger.error(f"❌ Summary error: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@app.get("/api/evaluation/recommendations/{incident_id}")
+async def get_quality_recommendations(incident_id: str):
+    """Get quality improvement recommendations for an incident."""
+    try:
+        if not evaluation_orchestrator:
+            raise RuntimeError("Evaluation orchestrator not available")
+
+        recommendations = evaluation_orchestrator.get_quality_recommendations(incident_id)
+        return {
+            "status": "success",
+            "incident_id": incident_id,
+            "recommendations": recommendations
+        }
+    except Exception as e:
+        logger.error(f"❌ Recommendations error: {e}")
+        return {
+            "status": "error",
+            "incident_id": incident_id,
+            "error": str(e)
+        }
+
+
+@app.get("/api/evaluation/metrics")
+async def get_unified_metrics():
+    """Get unified metrics from all evaluation frameworks."""
+    try:
+        if not evaluation_orchestrator:
+            raise RuntimeError("Evaluation orchestrator not available")
+
+        summary = evaluation_orchestrator.get_metrics_summary(last_n=100)
+
+        return {
+            "status": "success",
+            "evaluator": "unified",
+            "data": summary,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"❌ Unified metrics error: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+# ============================================================================
+# LANGSMITH DATASET ENDPOINTS
+# ============================================================================
+
+@app.post("/api/langsmith/export-metrics")
+async def export_metrics_to_langsmith():
+    """Export all evaluation metrics to LangSmith datasets."""
+    try:
+        if not langsmith_exporter:
+            return {
+                "status": "error",
+                "message": "LangSmith not configured",
+                "help": "Set LANGSMITH_API_KEY in .env to enable LangSmith integration"
+            }
+
+        from pathlib import Path
+        results = langsmith_exporter.export_all_metrics(Path("memory/evaluation"))
+
+        return {
+            "status": "success",
+            "exported_files": results,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"❌ Export error: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@app.get("/api/langsmith/status")
+async def get_langsmith_status():
+    """Get LangSmith integration status."""
+    try:
+        from ..langsmith_config import get_trace_status
+        status = get_trace_status()
+
+        return {
+            "status": "success",
+            "langsmith": status,
+            "datasets_enabled": langsmith_tracker is not None
+        }
+    except Exception as e:
+        logger.error(f"❌ Status error: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@app.post("/api/langsmith/create-dataset")
+async def create_langsmith_dataset(request: dict = Body(...)):
+    """Create a new LangSmith dataset."""
+    try:
+        if not langsmith_tracker:
+            return {
+                "status": "error",
+                "message": "LangSmith not configured"
+            }
+
+        name = request.get("name")
+        description = request.get("description", "")
+
+        if not name:
+            raise ValueError("Dataset name is required")
+
+        dataset_id = langsmith_tracker.create_evaluation_dataset(name, description)
+
+        if not dataset_id:
+            raise ValueError("Failed to create dataset")
+
+        return {
+            "status": "success",
+            "dataset_id": dataset_id,
+            "name": name,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"❌ Dataset creation error: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@app.post("/api/langsmith/log-evaluation")
+async def log_evaluation_to_langsmith(request: dict = Body(...)):
+    """Log an evaluation to LangSmith dataset."""
+    try:
+        if not langsmith_tracker:
+            return {
+                "status": "error",
+                "message": "LangSmith not configured"
+            }
+
+        dataset_id = request.get("dataset_id")
+        inputs = request.get("inputs", {})
+        outputs = request.get("outputs", {})
+        metadata = request.get("metadata", {})
+
+        if not dataset_id:
+            raise ValueError("Dataset ID is required")
+
+        success = langsmith_tracker.log_evaluation_example(
+            dataset_id=dataset_id,
+            inputs=inputs,
+            outputs=outputs,
+            metadata=metadata
+        )
+
+        return {
+            "status": "success" if success else "error",
+            "logged": success,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"❌ Log error: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
+
+
+@app.post("/api/langsmith/export-incident")
+async def export_incident_to_langsmith(request: dict = Body(...)):
+    """Export incident analysis to LangSmith trace."""
+    try:
+        if not langsmith_tracker:
+            return {
+                "status": "error",
+                "message": "LangSmith not configured"
+            }
+
+        incident_id = request.get("incident_id")
+        stages = request.get("stages", {})
+        evaluations = request.get("evaluations", {})
+        overall_quality = request.get("overall_quality", 0.0)
+
+        if not incident_id:
+            raise ValueError("Incident ID is required")
+
+        success = langsmith_tracker.log_analysis_trace(
+            incident_id=incident_id,
+            stages=stages,
+            evaluations=evaluations,
+            overall_quality=overall_quality
+        )
+
+        return {
+            "status": "success" if success else "error",
+            "traced": success,
+            "incident_id": incident_id,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"❌ Trace error: {e}")
+        return {
+            "status": "error",
+            "error": str(e)
+        }
 
 
 if __name__ == "__main__":
