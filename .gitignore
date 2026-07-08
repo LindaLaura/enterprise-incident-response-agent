@@ -1,6 +1,7 @@
 # Environment variables
 .env
 .env.local
+.env.example
 
 # Vector database
 chroma_db/
@@ -31,6 +32,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+venv/
+.venv/
 
 # IDE
 .vscode/
